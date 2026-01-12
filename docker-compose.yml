@@ -1,0 +1,40 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: lakeflow-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: demo
+      POSTGRES_USER: lakeflow
+      POSTGRES_PASSWORD: lakeflow
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_replication_slots=10
+      - -c
+      - max_wal_senders=10
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init:/docker-entrypoint-initdb.d
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: lakeflow-sqlserver
+    restart: unless-stopped
+    ports:
+      - "1433:1433"
+    environment:
+      ACCEPT_EULA: "Y"
+      SA_PASSWORD: "Str0ng!Passw0rd"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+      - ./sqlserver-init:/docker-entrypoint-initdb.d
+
+volumes:
+  pgdata:
+  sqlserver-data:
