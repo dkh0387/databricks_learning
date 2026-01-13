@@ -1,4 +1,4 @@
-# Docker-Compose:
+# Docker:
 
 - Start:
 
@@ -9,8 +9,34 @@
 - Check logs:
 
 ```bash
-  docker logs lakeflow-postgres
+  docker logs lakeflow-sqlserver
 ```
+
+- Activate SQL Server Agent for CDC logs:
+
+```bash
+  docker exec -it lakeflow-sqlserver bash
+  /opt/mssql/bin/mssql-conf set sqlagent.enabled true
+  exit
+  docker restart lakeflow-sqlserver
+```
+
+- Prove whether SQL Server Agent is running:
+
+```sql
+  SELECT servicename, status_desc
+  FROM sys.dm_server_services;
+```
+
+# CDC and CT Tracking:
+
+## Prepare SQL Server for ingestion using the utility objects script
+
+- See: https://docs.databricks.com/aws/en/ingestion/lakeflow-connect/sql-server-utility
+
+## Set up DDL capture and schema evolution
+
+- See: https://docs.databricks.com/aws/en/archive/connectors/sql-server-ddl-legacy
 
 # Serve:
 
@@ -34,7 +60,7 @@ psql \
 - CDC configuration for databricks:
 
   | Feld     | Wert                |
-    | -------- | ------------------- |
+  | -------- | ------------------- |
   | Host     | `2.tcp.eu.ngrok.io` |
   | Port     | `12345`             |
   | Database | `demo`              |
