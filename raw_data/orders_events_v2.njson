@@ -1,0 +1,2 @@
+{"order_id":2001,"customer":{"id":21,"segment":"B2C"},"status":"SHIPPED","amount":89.00,"order_ts":"2025-01-11T09:00:00","shipping":{"provider":"DHL","tracking":"123ABC"}}
+{"order_id":2003,"customer":{"id":23,"segment":"B2C"},"status":"PAID","amount":59.00,"order_ts":"2025-01-11T09:10:00","coupon":"NEWYEAR"}

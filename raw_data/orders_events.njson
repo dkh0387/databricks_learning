@@ -1,0 +1,2 @@
+{"order_id":2001,"customer":{"id":21,"segment":"B2C"},"status":"CREATED","amount":89.00,"order_ts":"2025-01-11T09:00:00"}
+{"order_id":2002,"customer":{"id":22,"segment":"B2B"},"status":"PAID","amount":499.00,"order_ts":"2025-01-11T09:05:00"}
