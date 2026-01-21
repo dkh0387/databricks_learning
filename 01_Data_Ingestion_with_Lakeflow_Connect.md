@@ -121,3 +121,25 @@ for streaming or incremental batch ingestion.
 #### Ingesting JSON Data
 
 ### Data Ingestion from Enterprise Sources (SaaS, databases)
+
+![Data Ingestion from Enterprise Sources (SaaS, databases)](images/ingestion_managed.png)
+
+- Uses serverless declarative pipeline jobs to collect credentials from unity catalog and to reach data sources
+- Data is being stored in streaming delta tables
+- Architecture:
+    - **Ingestion gateway:** collects credentials from Unity Catalog and connects to databases. Limits the number of
+      direct
+      connections to the database and can be installed inside the network to avoid firewall issues
+    - **Unity catalog volume:** intermediate staging layer enabling pipelines to pick up and stream data
+    - **Managed ingestion pipeline:** collects data and stores it in streaming delta tables
+        - Partner connect: third party connectors to ingest data from various sources if there is no managed connector
+          available. It acts between your data source and Databricks Lakehouse and enables you to use Lakeflow Connect
+          with not directly supported data sources
+
+## Additional Features
+
+- **Lakehouse Federation:** allows querying external data sources without moving data to the Databricks Lakehouse.
+  Useful for POC and testing purposes
+- **Zerobus:** allows writing event data to the lakehouse with high throughput and low latency
+- **Delta sharing:** allows sharing data across platforms, clouds and regions
+- **Databricks marketplace:** allows open exchange for all data products like datasets, notebooks, ML models, etc.

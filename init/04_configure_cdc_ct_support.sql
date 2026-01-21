@@ -24,6 +24,17 @@ IF NOT EXISTS (SELECT 1
     END
 GO
 
+-- Activate Change Tracking for the customers table
+IF NOT EXISTS (SELECT 1
+               FROM sys.change_tracking_tables
+               WHERE object_id = OBJECT_ID('dbo.customers'))
+    BEGIN
+        ALTER TABLE dbo.customers
+            ENABLE CHANGE_TRACKING
+                WITH (TRACK_COLUMNS_UPDATED = ON);
+    END
+GO
+
 -- Activate Change Data Capture for the database
 IF NOT EXISTS (SELECT 1
                FROM sys.databases
@@ -44,6 +55,20 @@ IF NOT EXISTS (SELECT 1
              @source_name = N'orders',
              @role_name = N'cdc_subscriber',
              @capture_instance = N'dbo_orders',
+             @supports_net_changes = 1;
+    END
+GO
+
+-- Activate Change Data Capture for the customers table
+IF NOT EXISTS (SELECT 1
+               FROM cdc.change_tables
+               WHERE source_object_id = OBJECT_ID('dbo.customers'))
+    BEGIN
+        EXEC sys.sp_cdc_enable_table
+             @source_schema = N'dbo',
+             @source_name = N'customers',
+             @role_name = N'cdc_subscriber',
+             @capture_instance = N'dbo_customers',
              @supports_net_changes = 1;
     END
 GO

@@ -15,6 +15,16 @@ GO
 USE lakeflow;
 GO
 
+CREATE TABLE customers
+(
+    customer_id INT IDENTITY (1,1) PRIMARY KEY,
+    email       VARCHAR(50) NOT NULL,
+    age         INT         NOT NULL,
+    region      VARCHAR(50) NOT NULL,
+    first_name  VARCHAR(50) NOT NULL,
+    last_name   VARCHAR(50) NOT NULL
+);
+
 CREATE TABLE orders
 (
     order_id    INT IDENTITY (1,1) PRIMARY KEY,
@@ -24,3 +34,4 @@ CREATE TABLE orders
     order_ts    DATETIME2 DEFAULT SYSDATETIME()
 );
 GO
+

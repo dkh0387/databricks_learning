@@ -12,12 +12,12 @@ WHERE name = 'lakeflow';
 -- expected: is_tracked_by_cdc = true
 SELECT name, is_tracked_by_cdc
 FROM sys.tables
-WHERE name = 'orders';
+WHERE name IN ('orders', 'customers');
 
 -- expected: change table exists
 SELECT *
 FROM cdc.change_tables
-WHERE source_object_id = OBJECT_ID('dbo.orders');
+WHERE source_object_id IN (OBJECT_ID('dbo.orders'), OBJECT_ID('dbo.customers'));
 
 
 -- is SQL Server Agent running?
@@ -29,6 +29,10 @@ SELECT *
 FROM cdc.dbo_orders_CT
 ORDER BY __$start_lsn DESC;
 
+SELECT *
+FROM cdc.dbo_customers_CT
+ORDER BY __$start_lsn DESC;
+
 /*
  Check CT configuration
  */
@@ -37,7 +41,11 @@ SELECT *
 FROM sys.change_tracking_databases
 WHERE database_id = DB_ID('lakeflow');
 
--- expected: 1 row
+-- expected: 1 row each
 SELECT *
 FROM sys.change_tracking_tables
 WHERE object_id = OBJECT_ID('dbo.orders');
+
+SELECT *
+FROM sys.change_tracking_tables
+WHERE object_id = OBJECT_ID('dbo.customers');
