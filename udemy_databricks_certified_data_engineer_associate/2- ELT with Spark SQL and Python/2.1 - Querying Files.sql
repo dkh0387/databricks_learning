@@ -38,6 +38,9 @@ SELECT count(*) FROM json.`${dataset.bookstore}/customers-json`
 
 -- COMMAND ----------
 
+ /*
+ Metadata such as file name or create ts can be added using spark functions.
+ */
  SELECT *,
     input_file_name() source_file
   FROM json.`${dataset.bookstore}/customers-json`;
@@ -58,6 +61,9 @@ SELECT * FROM text.`${dataset.bookstore}/customers-json`
 
 -- COMMAND ----------
 
+/*
+Retrieve file metadata using the binaryFile function.
+*/
 SELECT * FROM binaryFile.`${dataset.bookstore}/customers-json`
 
 -- COMMAND ----------
@@ -72,6 +78,10 @@ SELECT * FROM csv.`${dataset.bookstore}/books-csv`
 
 -- COMMAND ----------
 
+/*
+Creating external table from csv files.
+This is NOT a delta table, because external file location is used. No data was moved to a delta location.
+*/
 CREATE TABLE books_csv
   (book_id STRING, title STRING, author STRING, category STRING, price DOUBLE)
 USING CSV
@@ -104,6 +114,7 @@ DESCRIBE EXTENDED books_csv
 -- COMMAND ----------
 
 -- MAGIC %python
+-- MAGIC # Write table data as new additional CSV files in the directory.
 -- MAGIC (spark.read
 -- MAGIC         .table("books_csv")
 -- MAGIC       .write
@@ -129,6 +140,11 @@ REFRESH TABLE books_csv
 
 -- COMMAND ----------
 
+/*
+After writing table data as CSV in the directory we have to refresh the table manually to see the new data.
+All data is being doubled.
+Issue of non delta table: manually refresh and duplicate data.
+*/
 SELECT COUNT(*) FROM books_csv
 
 -- COMMAND ----------
@@ -138,6 +154,11 @@ SELECT COUNT(*) FROM books_csv
 
 -- COMMAND ----------
 
+/*
+Create a fully managed delta table.
+Raw data files were moved to managed location:
+dbfs:/user/hive/warehouse/customers
+*/
 CREATE TABLE customers AS
 SELECT * FROM json.`${dataset.bookstore}/customers-json`;
 
@@ -145,6 +166,11 @@ DESCRIBE EXTENDED customers;
 
 -- COMMAND ----------
 
+/*
+Limitation by creating delta tables directly from reading files:
+- No support for addtional options such as delimiter
+- No support for schema evolution
+*/
 CREATE TABLE books_unparsed AS
 SELECT * FROM csv.`${dataset.bookstore}/books-csv`;
 
@@ -152,6 +178,9 @@ SELECT * FROM books_unparsed;
 
 -- COMMAND ----------
 
+/*
+Walk around: create a temp view with all options and then create a delta table from the view.
+*/
 CREATE TEMP VIEW books_tmp_vw
    (book_id STRING, title STRING, author STRING, category STRING, price DOUBLE)
 USING CSV

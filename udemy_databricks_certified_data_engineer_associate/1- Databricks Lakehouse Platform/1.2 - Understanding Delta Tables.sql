@@ -31,6 +31,10 @@ CREATE TABLE employees
 
 -- COMMAND ----------
 
+/*
+Note: each INSERT statement is a separate transaction, so multiple data files will be created.
+We can verify that the data files were created in the correct location down below using %fs magic command.
+*/
 INSERT INTO employees
 VALUES 
   (1, "Adam", 3500.0),
@@ -105,6 +109,10 @@ SELECT * FROM employees
 
 -- COMMAND ----------
 
+/*
+All versions of the table are still available, each can be queried using the version number: 
+`SELECT * FROM employees VERSION AS OF 5`
+*/
 DESCRIBE HISTORY employees
 
 -- COMMAND ----------

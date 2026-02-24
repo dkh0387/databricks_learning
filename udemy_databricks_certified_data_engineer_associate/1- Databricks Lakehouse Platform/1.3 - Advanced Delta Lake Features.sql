@@ -52,6 +52,12 @@ DESCRIBE DETAIL employees
 
 -- COMMAND ----------
 
+/*
+Using ZORDER BY allows for more efficient file structure.
+If files contain an id column, the files will be sorted by id (1-49 first file, 50-99 second file, etc.).
+This allows for more efficient reads and writes by reducing the number of files that need to be read.
+In this case only one .parquet file remains.
+*/
 OPTIMIZE employees
 ZORDER BY id
 
@@ -75,6 +81,11 @@ DESCRIBE HISTORY employees
 
 -- COMMAND ----------
 
+/*
+Garbage collection removes files that are no longer needed.
+Default retention period is 7 days, so only files older than 7 days will be removed.
+Note: versions of the table older tahn 7 days are no longer accessible since files are removed.
+*/
 VACUUM employees
 
 -- COMMAND ----------
@@ -83,11 +94,15 @@ VACUUM employees
 
 -- COMMAND ----------
 
+/*
+In order to see unused files deleted after ZORDER BY operation we need to decrease retention period.
+It will only work after setting spark.databricks.delta.retentionDurationCheck.enabled = false.
+*/
 VACUUM employees RETAIN 0 HOURS
 
 -- COMMAND ----------
 
-SET spark.databricks.delta.retentionDurationCheck.enabled = false;
+SET spark.databricks.delta.retentionDurationCheck.enabled = false; -- This setting cannot be changed via SQL, set it at cluster or Spark session configuration.
 
 -- COMMAND ----------
 
