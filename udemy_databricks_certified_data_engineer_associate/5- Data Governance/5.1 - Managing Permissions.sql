@@ -12,7 +12,7 @@ VALUES (1, "Anna", 2500, "Paris"),
        (6, "Adam", 3500, "London"),
        (7, "Ali", 3000, "Paris");
 
-CREATE VIEW hive_metastore.hr_db.paris_emplyees_vw
+CREATE VIEW hive_metastore.hr_db.paris_employees_vw
 AS SELECT * FROM hive_metastore.hr_db.employees WHERE city = 'Paris';
 
 ------------------------------------------------------
@@ -21,8 +21,8 @@ GRANT SELECT, MODIFY, READ_METADATA, CREATE ON SCHEMA hive_metastore.hr_db TO hr
 
 GRANT USAGE ON SCHEMA hive_metastore.hr_db TO hr_team;
 
-GRANT SELECT ON VIEW hive_metastore.hr_db.paris_emplyees_vw TO `adam@derar.cloud`;
+GRANT SELECT ON VIEW hive_metastore.hr_db.paris_employees_vw TO `adam@derar.cloud`;
 
 SHOW GRANTS ON SCHEMA hive_metastore.hr_db;
 
-SHOW GRANTS ON VIEW hive_metastore.hr_db.paris_emplyees_vw;
+SHOW GRANTS ON VIEW hive_metastore.hr_db.paris_employees_vw;

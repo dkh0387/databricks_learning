@@ -1,0 +1,64 @@
+{
+  "_comment": "Week 4 · Lakeflow Job definition. Import via 'Workflows → Create Job → JSON view → Paste'. Replace cluster_id, notebook_path, and pipeline_id with values from your workspace.",
+  "name": "orders_daily_etl",
+  "tasks": [
+    {
+      "task_key": "ingest",
+      "description": "Auto Loader incremental batch into bronze",
+      "notebook_task": {
+        "notebook_path": "/Repos/your-user/databricks_learning/week_2_ingestion/code/02_autoloader_incremental_batch",
+        "source": "WORKSPACE"
+      },
+      "job_cluster_key": "main"
+    },
+    {
+      "task_key": "transform",
+      "description": "Bronze → silver → gold via declarative pipeline",
+      "depends_on": [{"task_key": "ingest"}],
+      "pipeline_task": {
+        "pipeline_id": "REPLACE_WITH_PIPELINE_ID"
+      }
+    },
+    {
+      "task_key": "branch_check",
+      "description": "If/Else: only run quality_audit on weekdays",
+      "depends_on": [{"task_key": "transform"}],
+      "condition_task": {
+        "op": "LESS_THAN",
+        "left":  "{{job.trigger.day_of_week}}",
+        "right": "6"
+      }
+    },
+    {
+      "task_key": "quality_audit",
+      "description": "SQL audit over silver",
+      "depends_on": [{"task_key": "branch_check", "outcome": "true"}],
+      "run_if": "ALL_SUCCESS",
+      "sql_task": {
+        "warehouse_id": "REPLACE_WITH_SQL_WAREHOUSE_ID",
+        "query": {
+          "query_id": "REPLACE_WITH_SAVED_QUERY_ID"
+        }
+      }
+    }
+  ],
+  "job_clusters": [
+    {
+      "job_cluster_key": "main",
+      "new_cluster": {
+        "spark_version": "15.4.x-scala2.12",
+        "node_type_id": "i3.xlarge",
+        "num_workers": 2
+      }
+    }
+  ],
+  "schedule": {
+    "quartz_cron_expression": "0 0 4 * * ?",
+    "timezone_id": "Europe/Berlin",
+    "pause_status": "UNPAUSED"
+  },
+  "email_notifications": {
+    "on_failure": ["denis.khaskin@path-it.com"]
+  },
+  "max_concurrent_runs": 1
+}

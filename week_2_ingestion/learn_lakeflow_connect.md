@@ -2,7 +2,7 @@
 
 ## General Architecture
 
-![General Architecture](images/Lakeflow_Connect_Architecture.png)
+![General Architecture](../images/Lakeflow_Connect_Architecture.png)
 
 ## What is Lakeflow Connect?
 
@@ -25,7 +25,7 @@ changes. With logs, we have the concept of table states, where all changes are b
 previous versions of the data.
 Delta Lake manages any data ingested into the Databricks Lakehouse regardless of the ingestion method.
 
-![What is Delta Lake?](images/delta_lake_review.png)
+![What is Delta Lake?](../images/delta_lake_review.png)
 
 ## Connector types
 
@@ -52,7 +52,7 @@ Ingesting data from enterprises sources: SaaS, databases, etc.
 
 ### Data Ingestion from Cloud Storage
 
-![Data Ingestion from Cloud Storage](images/ingestion_from_cloud_storage.png)
+![Data Ingestion from Cloud Storage](../images/ingestion_from_cloud_storage.png)
 
 #### Data Formats
 
@@ -79,9 +79,9 @@ Ingesting data from enterprises sources: SaaS, databases, etc.
     ```sql
     CREATE TABLE new_table;
     COPY INTO new_table FROM '<dir_path>'
-    FILE_FORMAT = <file_type>
-    FORMAT_OPTIONS(<ooptions>)
-    COPY_OPTIONS(<ooptions>)
+    FILEFORMAT = <file_type>
+    FORMAT_OPTIONS(<options>)
+    COPY_OPTIONS(<options>)
     ```
 
 3. `AUTO LOADER` (**incremental batch or streaming**): processes new files in either a batch or streaming manner as they
@@ -100,29 +100,41 @@ Ingesting data from enterprises sources: SaaS, databases, etc.
    readStream
    .format("cloudFiles")
    .option("cloudFiles.format", "json")
-   .option("cloudFiles.schemaLocation", "<checkpoint_path>")
+   .option("cloudFiles.schemaLocation", "<schema_path>")     # schema versions live here
    .load("/Volumes/catalog/schema/files")
    .writeStream
-   .option("checkpointLocation", "<checkpoint_path>")
+   .option("checkpointLocation", "<checkpoint_path>")        # MUST be a different path from schemaLocation
    .trigger(processingTime = "1 hour")
    .toTable("catalog.database.table")
    )
    ```
 
-Databricks recommends using the `AUTO LOADER` with _Lakeflow Decxlarative Pipelines_ with SQL over `COPY INTO` method
-for streaming or incremental batch ingestion.
+Databricks recommends using the `AUTO LOADER` with _Lakeflow Spark Declarative Pipelines_ with SQL over `COPY INTO`
+method for streaming or incremental batch ingestion.
 
-![Data Ingestion from Cloud Storage](images/ingestion_types.png)
+![Data Ingestion from Cloud Storage](../images/ingestion_types.png)
 
 #### Metadata Columns
 
-#### Rescued Data Columns
+Hidden `_metadata` struct on file sources: `_metadata.file_path`, `_metadata.file_name`, `_metadata.file_size`,
+`_metadata.file_modification_time`, `_metadata.file_block_start`, `_metadata.file_block_length`.
+See `learn_deep_dive.md` §3 for usage.
+
+#### Rescued Data Column
+
+Auto Loader adds `_rescued_data` (STRING containing JSON) by default. Captures fields missing from the schema, type
+mismatches, and case mismatches so no data is silently lost. Disable with `cloudFiles.rescuedDataColumn = ""`.
+See `learn_deep_dive.md` §3 for evolution-mode interaction.
 
 #### Ingesting JSON Data
 
+Schema-on-read via Auto Loader (untyped columns default to STRING — pin types with `cloudFiles.schemaHints`).
+Parse stringified JSON columns later with `from_json(payload, schema)`. For highly variable JSON use the **VARIANT**
+type (DBR 15.3+). Full coverage with examples in `learn_deep_dive.md` §5.
+
 ### Data Ingestion from Enterprise Sources (SaaS, databases)
 
-![Data Ingestion from Enterprise Sources (SaaS, databases)](images/ingestion_managed.png)
+![Data Ingestion from Enterprise Sources (SaaS, databases)](../images/ingestion_managed.png)
 
 - Uses serverless declarative pipeline jobs to collect credentials from unity catalog and to reach data sources
 - Data is being stored in streaming delta tables

@@ -1,0 +1,91 @@
+# Week 5 · Reference Declarative Automation Bundle.
+# Copy this file to a fresh repo root, run `databricks bundle init` for a fuller template,
+# or `databricks bundle validate` against this skeleton.
+
+bundle:
+  name: orders_pipeline
+  databricks_cli_version: ">=0.230.0"
+
+include:
+  - resources/*.yml          # optional: split resources into separate files
+
+variables:
+  catalog:
+    description: "Target Unity Catalog"
+    default: dev_catalog
+  notification_email:
+    description: "Failure email"
+    default: team@example.com
+  cluster_node_type:
+    default: i3.xlarge
+
+sync:
+  include:
+    - "src/**"
+  exclude:
+    - "**/__pycache__/**"
+    - "tests/**"
+
+resources:
+  jobs:
+    orders_etl:
+      name: "orders_etl_${bundle.target}"
+      email_notifications:
+        on_failure: ["${var.notification_email}"]
+      tasks:
+        - task_key: ingest
+          notebook_task:
+            notebook_path: ./src/ingest.py
+          job_cluster_key: main
+        - task_key: transform
+          depends_on:
+            - task_key: ingest
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.orders_silver.id}
+      job_clusters:
+        - job_cluster_key: main
+          new_cluster:
+            spark_version: "15.4.x-scala2.12"
+            node_type_id: ${var.cluster_node_type}
+            num_workers: 2
+
+  pipelines:
+    orders_silver:
+      name: "orders_silver_${bundle.target}"
+      catalog: ${var.catalog}
+      target: silver
+      libraries:
+        - notebook:
+            path: ./src/transform.sql
+
+targets:
+  dev:
+    default: true
+    mode: development          # prefixes [dev <user>], pauses schedules
+    workspace:
+      host: https://dev.cloud.databricks.com
+    variables:
+      catalog: dev_catalog
+
+  staging:
+    workspace:
+      host: https://staging.cloud.databricks.com
+    variables:
+      catalog: staging_catalog
+      cluster_node_type: i3.2xlarge
+
+  prod:
+    mode: production           # locks naming + run_as, schedules active
+    workspace:
+      host: https://prod.cloud.databricks.com
+    run_as:
+      service_principal_name: "prod-deployer-sp"
+    variables:
+      catalog: prod_catalog
+      cluster_node_type: i3.4xlarge
+      notification_email: oncall@example.com
+    permissions:
+      - level: CAN_VIEW
+        group_name: data_consumers
+      - level: CAN_MANAGE
+        group_name: data_platform_admins

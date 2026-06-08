@@ -1,3 +1,12 @@
+# Databricks Learning
+
+Study materials and demos for the **Databricks Certified Data Engineer Associate** exam (May 2026 version).
+
+- Start with `LEARNING_PATH.md` for the full 6-week study plan.
+- Content lives under `week_1_platform/` → `week_6_governance/`. Each folder has `learn*.md` (theory), `glossary.md` (key terms), and `code/` (runnable Databricks notebooks / SQL / Python).
+- The full Udemy course materials are kept separate under `udemy_databricks_certified_data_engineer_associate/`.
+- This README documents the local **SQL Server CDC demo** used in `week_2_ingestion/learn_lakeflow_connect.md`.
+
 # Docker:
 
 - Start:
@@ -47,19 +56,20 @@
 ```
 
 - You get something like: `tcp://0.tcp.ngrok.io:1234 -> localhost:1433`
-- Tunnel check:
+- Tunnel check (SQL Server client — `psql` is PostgreSQL only and will not work here):
 
 ```bash
-psql \
-  -h 7.tcp.eu.ngrok.io \
-  -p 11356 \
+sqlcmd \
+  -S tcp:7.tcp.eu.ngrok.io,11356 \
   -U lakeflow \
-  demo
+  -P lakeflow \
+  -d demo \
+  -Q "SELECT @@VERSION"
 ```
 
-- CDC configuration for databricks:
+- CDC configuration for Databricks:
 
-  | Feld     | Wert                |
+  | Field    | Value               |
   | -------- | ------------------- |
   | Host     | `2.tcp.eu.ngrok.io` |
   | Port     | `12345`             |

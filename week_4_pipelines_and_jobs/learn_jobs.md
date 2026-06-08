@@ -28,7 +28,7 @@ Everything is natively integrated in a Databricks platform. It eliminates integr
 - Supported languages: Python, SQL, Scala, R, Java (JAR)
 - Running environment:
     - **Interactive clusters:** development, testing, debugging
-    - **Job clusters:** production (50% cheaper since only for job runs)
+    - **Job clusters:** production (billed at the Jobs Compute DBU rate, lower than All-Purpose Compute)
     - **Serverless clusters:** better overall performance, fully managed
     - **SQL warehouse:** for SQL, dashboards, BI, etc.
 - Performance-optimized option: choose between lower cost and faster execution for serverless tasks:
@@ -49,10 +49,11 @@ Everything is natively integrated in a Databricks platform. It eliminates integr
     - Schedule: daily, weekly, monthly, etc., cron expression support
     - Event: on file upload (Azure Storage, AWS S3, Google Cloud Storage, Databricks Volumes, up to 10K files), on table
       update, etc.
-    - Continuous: build-in retry logic, ideal for streaming (Data Ingestion Gateway, Fraud Detection Engine, etc.)
+    - Continuous: built-in retry logic, ideal for streaming (Data Ingestion Gateway, Fraud Detection Engine, etc.)
     - Manual: user-initiated action can be started from UI, API, SDK or Asset Bundles (Testing and Debugging)
-    - Table update: multiple tables can be monitored (up to 10), and a job will be triggered when any/all of them
-      change (insert, update, delete, merge); sleep time between runs or waiting time can be configured
+    - Table update: monitors UC tables (up to 10 per trigger) and fires when any/all of them receive a new commit
+      (regardless of operation type — INSERT, UPDATE, DELETE, MERGE all count as commits). Min time between triggers
+      and max wait window are configurable
 
 ## Conditional and iterative tasks
 
@@ -80,8 +81,8 @@ Everything is natively integrated in a Databricks platform. It eliminates integr
 
 ## Monitoring job performance
 
-- **System tables:** `system.lakeflow` is a build-in read-only catalog that logs all job activities across workspaces
-  within a region
+- **System tables:** `system.lakeflow` is a built-in read-only schema (under the `system` catalog) that logs all job
+  activities across workspaces within a region
     - **Key tables:**
       `jobs`: job basic info
       `job_tasks`: task basic definition
@@ -101,10 +102,11 @@ Everything is natively integrated in a Databricks platform. It eliminates integr
     - Job clusters: ideal for jobs (terminates if the job is finished, but start-up time is longer)
     - Serverless clusters: best overall performance (higher cost, lower start-up time, scalability)
 - **Pricing components:**
-    - DBUs: compute resources (CPU, memory, storage) to Databricks
-    - Infrastructure costs: costs to cloud providers (AWS, Azure, GCP)
-    - Operational costs: work time, etc.
-      In the case of serverless, only DBUs are charged.
+    - DBU (Databricks Unit): the unit Databricks bills compute by. Rate varies by workload type — Jobs Compute,
+      All-Purpose Compute, SQL Compute, Serverless — each has its own DBU rate
+    - Infrastructure costs: costs to cloud providers (AWS, Azure, GCP) for the underlying VMs
+    - Operational costs: engineering time, monitoring, etc.
+    - With serverless, the cloud-VM cost is bundled into the DBU rate — you pay Databricks only
 - **Modular design:** break complex DAGs into smaller, more manageable units (each represents a business context, not
   a technical task)
     - Parent-Child relationship: a parent job can have multiple child jobs

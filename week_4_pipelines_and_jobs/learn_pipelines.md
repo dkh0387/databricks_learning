@@ -103,7 +103,7 @@
 ## Change Data Capture (CDC)
 
 - **CDC:** technique used to track changes in data sources (database, lakehouse, etc.) and apply them to a target system
-  _Note:_ CDC must be configured in the source system, for a database see `init/04_configure_cdc_ct_support.sql`
+  _Note:_ CDC must be configured in the source system, for a database see `../init/04_configure_cdc_ct_support.sql`
 - **SCD (Slowly Changing Dimension):** defines how historical changes are tracked and stored in a target system
   Two types:
     - SCD Type 1: overwrites existing data (old data is gone).
@@ -151,4 +151,5 @@
 - Developing Lakeflow declarative pipelines using Pipeline Editor with SQL and Python code
 - Data quality expectations
 - Event Logs and pipeline metrics
-- Change Data Capture (CDC) using `APPLY CHANGES INTO` to handle slowly changing dimensions (SCD)
+- Change Data Capture (CDC) using `AUTO CDC INTO` (the 2026 replacement of the old `APPLY CHANGES INTO` DLT syntax) to
+  handle slowly changing dimensions (SCD)

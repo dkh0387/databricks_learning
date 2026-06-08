@@ -1,3 +1,8 @@
+# DevOps Essentials for Data Engineering
+
+> Hands-on CI/CD with Git Folders and Declarative Automation Bundles is in `learn_cicd.md`.
+> This note covers the conceptual foundations.
+
 ## Software Engineering best practices, DevOps, and CI/CD fundamentals
 
 ### Key concepts:
@@ -75,28 +80,31 @@
 
 - `pyspark.testing.utils`: provides helper functions for testing PySpark (`assertDataFrameEqual(...)`,
   `assertSchemaEqual(...)`, etc.)
-- Example: `test_spark_dataframe_equality.py`
 
 ## Integration testing
 
-- **SPD Expectations:** validate results of tables within pipelines (like MVs for row counts, column counts, etc.)
-- **Job Tasks:** integration tests as separate notebooks, integrated in jobs as tasks
+- **SDP Expectations:** validate results of tables within Spark Declarative Pipelines (constraints on row counts,
+  column ranges, business rules) — see `../week_4_pipelines_and_jobs/learn_pipelines.md`
+- **Job Tasks:** integration tests as separate notebooks, integrated in Lakeflow Jobs as tasks
 
-### Version control with Git
+## Version control with Git
 
-- **PAT:** personal access token to be used for authentication in Databricks
-- **Add PAT to Databricks:** `Settings > Developer Settings > Personal access token`
-- **Databricks Git Folders:** `Workspace > Users > <username> > Create Git Folder`
-- **Assets Deployment:**
-    - REST API: `POST /2.0/git/repositories/<repo-id>/deploy` (best for custom integrations)
-    - CLI: `databricks git deploy <repo-id>` (best for local development)
-    - SDK: `workspace.deploy_git_repo(...)` (best for embedded Databricks functionality in applications)
-    - Easer to use: (easy) SDK > CLI > REST API (hard)
-    - Flexibility: (flexibel) REST API > SDK > CLI (unflexibel)
-    - **Databricks Asset Bundles (DAB):** the most recommended way to deploy assets to Databricks
-        - Version control
-        - Code review
-        - Testing
-        - Continuous integration
-        - Infrastructure as code: assets like jobs, pipelines, and notebooks are defined as source files and metadata in
-          YAML format (`databricks.yml`)
+- **PAT:** personal access token used for authentication between Databricks and the Git provider
+- **Add PAT to Databricks:** `Settings > Linked accounts > Git integration`
+- **Databricks Git Folders** (formerly Repos): `Workspace > Users > <username> > Create > Git Folder`
+- **Asset deployment options:**
+    - **Declarative Automation Bundles (DAB, formerly Databricks Asset Bundles):** the recommended way to deploy
+      jobs, pipelines, notebooks, and other resources as code. CLI: `databricks bundle init / validate / deploy / run`.
+      Bundle configuration in `databricks.yml`. Full hands-on coverage in
+      `learn_cicd.md`.
+    - **Databricks CLI** (`databricks` binary): wraps the REST API. Used for ad-hoc operations and inside CI runners.
+    - **Databricks SDKs** (`databricks-sdk` for Python / Java / Go): embed Databricks operations in applications.
+    - **REST API** (`/api/2.0/...`, `/api/2.1/...`): lowest level, used by everything above. Most flexible, most code.
+    - Ease of use: **DAB > CLI > SDK > REST API** (DAB is declarative; the rest are imperative).
+    - Flexibility: **REST API > SDK > CLI > DAB** (DAB targets the common case).
+- **What DAB gives you:**
+    - Version control of infrastructure alongside source code
+    - Code review of resource changes via PRs
+    - Repeatable deployments across dev / staging / prod
+    - Continuous integration via `databricks bundle deploy -t <target>` in CI
+    - Infrastructure as code: jobs, pipelines, notebooks declared as YAML in `databricks.yml`
