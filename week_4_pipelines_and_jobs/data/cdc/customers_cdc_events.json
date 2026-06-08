@@ -1,3 +1,4 @@
+{"customer_id":6,"name":"Faisal Khan","email":"faisal.khan@example.com","country":"AE","signup_date":"2025-04-12","tier":"bronze","op":"INSERT","change_ts":"2026-05-30T07:00:00Z"}
 {"customer_id":21,"name":"Ulrich Becker","email":"ulrich.becker@example.com","country":"DE","signup_date":"2026-06-01","tier":"bronze","op":"INSERT","change_ts":"2026-06-01T08:00:00Z"}
 {"customer_id":22,"name":"Valentina Romero","email":"v.romero@example.com","country":"AR","signup_date":"2026-06-01","tier":"silver","op":"INSERT","change_ts":"2026-06-01T08:05:00Z"}
 {"customer_id":13,"name":"Maya Patel","email":"maya.patel@new.example.com","country":"IN","signup_date":"2025-06-01","tier":"gold","op":"UPDATE","change_ts":"2026-06-01T09:00:00Z"}

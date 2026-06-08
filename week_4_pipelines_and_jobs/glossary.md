@@ -37,4 +37,4 @@
 | **Stream-MV join** | Two streams joined and persisted in a materialized view. |
 | **Sink** | API for writing pipeline output to external systems (Kafka, Event Hub, …). |
 | **Flow** | Pipeline primitive blending multiple sources into one target table. |
-| **Asset Bundle** | Bundled pipeline+job definitions used to deploy declaratively (covered in Week 5). |
+| **Declarative Automation Bundle (DAB)** | Bundled pipeline+job definitions used to deploy declaratively. Formerly "Databricks Asset Bundles"; CLI command name unchanged. Covered in Week 5. |

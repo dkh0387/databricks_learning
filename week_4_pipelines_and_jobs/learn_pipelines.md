@@ -2,29 +2,32 @@
 
 ## Key definitions
 
-- **Spark Declarative Pipelines:** data ingestion (Lakeflow Connect, see chapter 1), ETL processing (SQL or Python,
-  Medallion Architecture, see chapter 2), BI reporting (Dashboards, PowerBI, etc.)
+- **Spark Declarative Pipelines (SDP):** Databricks' declarative framework for building batch or streaming ETL
+  pipelines in SQL or Python. The pipeline runtime handles orchestration, dependency tracking, retries, and
+  incremental refresh. Integrates with Lakeflow Connect (ingestion) and downstream dashboards/BI but is itself
+  scoped to the **ETL layer** of the medallion.
 - **Dataset types:**
     - Streaming Table: table with support for streaming or incremental data processing (only new data).
-      SQL: `CREATE OR REFRESH STREAMING TABLE xyz FROM STREAM read_files()` (`FROM STREAM` enables autoloading with
-      checkpoints)
+      SQL: `CREATE OR REFRESH STREAMING TABLE xyz AS SELECT * FROM STREAM read_files(...)` (`FROM STREAM` enables
+      autoloading with checkpoints)
     - Materialized View: records are processed once and stored in a table (current data). Useful for aggregations and
-      complex queries. In difference to a view, it is physically stored in a table.
-      SQL: `CREATE OR REFRESH MATERIALIZED VIEW xyz AS SELECT * FROM table_xyz` (`REFRESH` guarantees that the view
-      is always up to date). Incremental refresh is available on serverless clusters only.
+      complex queries. Unlike a view, it is physically stored.
+      SQL: `CREATE OR REFRESH MATERIALIZED VIEW xyz AS SELECT * FROM table_xyz` (`REFRESH` guarantees the view stays
+      up to date). Incremental refresh requires **serverless** compute.
     - View: a saved query. Any time the query is executed, the latest data is returned.
       Views cannot be used as a streaming source.
-      There are two types: temporary (lifetime across the pipeline, not exposed to any catalog) and normal (exposed to
+      There are two kinds: temporary (lifetime within the pipeline, not exposed to any catalog) and normal (exposed to
       the catalog).
-      SQL: `CREATE OR REPLACE (TEMPORARY) VIEW xyz AS SELECT * FROM table_xyz`
+      SQL: `CREATE OR REPLACE VIEW xyz AS SELECT * FROM table_xyz` (add the optional `TEMPORARY` keyword between
+      `REPLACE` and `VIEW` to get the pipeline-scoped form)
 
 ## Advantages
 
 - **Simple pipeline authoring:** just SQL or Python for ingestion and transformation
 - **Easily scalable:** scales automatically if needed
 - **Batch or streaming:** ingest data at once or stream continuously
-- **Auto Loader:** if the pipeline runs against it uses checkpoints to track what data was already ingested and
-  processed
+- **Auto Loader:** when the pipeline reads cloud files via Auto Loader, checkpoints track which files have already
+  been ingested and processed
 
 ## Structure
 
@@ -53,20 +56,22 @@
 
 ## Creating data quality expectations
 
-- We can add constraints to the SQLs to ensure data quality or apply filters:
-  ```sql 
-  CREATE OR REFRESH STREAMING TABLE <target_table>
-  (CONSTRAINT valid_payment_method CHECK (paymentMethod IN ('visa', 'mastercard')),
-    CONSTRAINT valid_date CHECK (dateTime >= '2022-01-01') ON VIOLATION DROP ROW,
-    CONSTRAINT valid_customer CHECK (customerID IS NOT NULL) ON VIOLATION FAIL UPDATE) AS
-  SELECT * FROM STREAM <source_table>
+- We can add constraints to the SQLs to ensure data quality or apply filters (example on the unified orders domain):
+  ```sql
+  CREATE OR REFRESH STREAMING TABLE silver_orders
+  (CONSTRAINT positive_amount CHECK (amount > 0)                  ON VIOLATION DROP ROW,
+   CONSTRAINT valid_status    CHECK (status IN ('placed','shipped','delivered','cancelled')),
+   CONSTRAINT valid_currency  CHECK (length(currency) = 3)        ON VIOLATION FAIL UPDATE) AS
+  SELECT * FROM STREAM(bronze_orders)
   ```
 
   ```python
   @dlt.table()
-  @dlt.expect("valid_payment_method", "paymentMethod IN ('visa', 'mastercard')")
-  def payments():
-    return spark.readStream.table("samples.bakehouse.sales_transactions")
+  @dlt.expect("positive_amount", "amount > 0")
+  def silver_orders():
+    # For sibling pipeline tables, prefer dlt.read_stream over spark.readStream.table
+    # so the dependency is registered in the pipeline graph.
+    return dlt.read_stream("bronze_orders")
   ```
 - As we see in the code, we can use:
     - warnings to notice violations but let data throw
@@ -78,10 +83,9 @@
 - **Stream-Snapshot Join:** join a streaming table with a static table (f.e. a lookup mapping table for country codes).
   _Note:_ since streaming is incremental, it joins only new rows of streaming table with the whole static table.
   Useful for enriching new data with static context.
-- **Stream-Materialized View Join:** join two streaming tables in a materialized view.
-  Useful if both data sets are changing frequently, and we want to combine them to create an up-to-date result in a
-  single view.
-  The materialized view will process all new rows from both tables and refresh itself incrementally.
+- **Stream-Stream Join inside a Materialized View:** join two streaming tables in the definition of a materialized
+  view. Useful when both datasets change frequently and you want an up-to-date combined result.
+  The MV refreshes incrementally, picking up new rows from either source.
 
 ## Deployment to production
 
@@ -92,7 +96,7 @@
   and on start
 - **Monitor:** use the Event Log to check execution status, runtime information, errors and metrics.
     - Captures information about:
-        * Audit Log: sho did what and when
+        * Audit Log: who did what and when
         * Data quality checks: constraint violations
         * Pipeline progress: status of each run
         * Data lineage: how data flows through the pipeline
@@ -139,8 +143,8 @@
     - Serverless cluster size
     - Incremental refresh for materialized views
     - Photon
-- **Databricks Asset Bundles:** enables to programmatically deploy, validate and run for CI/CD production workloads from
-  a Git repository
+- **Declarative Automation Bundles (DAB, formerly Databricks Asset Bundles):** enables programmatic deploy, validate
+  and run of CI/CD production workloads from a Git repository (full coverage in Week 5)
 
 ## Takeaways
 

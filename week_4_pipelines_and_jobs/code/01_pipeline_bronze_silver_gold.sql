@@ -146,6 +146,8 @@ AS SELECT
 
 -- COMMAND ----------
 
+-- NOTE on ordering: ORDER BY in a materialized view definition does NOT guarantee stored
+-- ordering — Delta storage layout is driven by clustering / Z-order. Order at query time.
 CREATE OR REFRESH MATERIALIZED VIEW gold_top_customers
 COMMENT 'Lifetime customer value ranking'
 AS SELECT
@@ -156,8 +158,7 @@ AS SELECT
      sum(o.amount)              AS lifetime_spend
    FROM   silver_orders o
    JOIN   silver_customers c USING (customer_id)
-   GROUP BY c.customer_id, c.name, c.region
-   ORDER BY lifetime_spend DESC;
+   GROUP BY c.customer_id, c.name, c.region;
 
 -- COMMAND ----------
 
@@ -171,5 +172,4 @@ AS SELECT
      sum(oi.line_total) AS revenue
    FROM   silver_order_items oi
    JOIN   silver_items i USING (item_id)
-   GROUP BY oi.item_id, i.name, i.category
-   ORDER BY revenue DESC;
+   GROUP BY oi.item_id, i.name, i.category;

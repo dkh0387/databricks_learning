@@ -57,5 +57,5 @@ STORED AS SCD TYPE 2;
 -- MAGIC ORDER BY customer_id, __START_AT;
 -- MAGIC ```
 -- MAGIC * `customer_id = 13` (Maya Patel) — two SCD2 rows: the original Week 2 seed + email change.
--- MAGIC * `customer_id = 6` (Faisal Khan) — present in SCD1 only as deleted; SCD2 preserves the prior row with `__END_AT` set.
+-- MAGIC * `customer_id = 6` (Faisal Khan) — INSERTed then DELETEd. **Removed** from SCD1; SCD2 retains the inserted row with `__END_AT` set to the deletion time.
 -- MAGIC * `customer_id = 21` (Ulrich Becker) — INSERT then UPDATE → two SCD2 rows.

@@ -13,11 +13,11 @@ LIMIT 20;
 
 -- COMMAND ----------
 
--- Recent runs of a specific job (replace job_id)
+-- Recent runs of a specific job. Replace 0 with your job_id (BIGINT) from `system.lakeflow.jobs`.
 SELECT run_id, result_state, period_start_time, period_end_time,
        (unix_timestamp(period_end_time) - unix_timestamp(period_start_time)) AS duration_s
 FROM   system.lakeflow.job_run_timeline
-WHERE  job_id = REPLACE_WITH_JOB_ID
+WHERE  job_id = 0           -- <-- replace with your job_id
   AND  period_start_time > current_date() - INTERVAL 14 DAYS
 ORDER BY period_start_time DESC;
 

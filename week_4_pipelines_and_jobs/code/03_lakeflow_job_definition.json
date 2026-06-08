@@ -1,12 +1,18 @@
 {
-  "_comment": "Week 4 · Lakeflow Job that orchestrates the medallion pipeline. Import via 'Workflows -> Create Job -> JSON view -> Paste'. Replace pipeline_id and warehouse_id with your workspace values.",
+  "_comment": "Week 4 · Lakeflow Job that orchestrates the medallion pipeline. Import via 'Workflows -> Create Job -> JSON view -> Paste'. Replace pipeline_id, warehouse_id and the user portion of the notebook paths with your workspace values.",
   "name": "dea_learning_orders_etl",
+  "parameters": [
+    {
+      "name": "min_day_of_week",
+      "default": "1"
+    }
+  ],
   "tasks": [
     {
       "task_key": "ingest_setup",
       "description": "Make sure the raw landing volume has the latest files",
       "notebook_task": {
-        "notebook_path": "/Workspace/Repos/your-user/databricks_learning/week_2_ingestion/code/00_setup_catalog_and_seed",
+        "notebook_path": "/Workspace/Users/<your-user>/databricks_learning/week_2_ingestion/code/00_setup_catalog_and_seed",
         "source": "WORKSPACE"
       },
       "job_cluster_key": "main"
@@ -28,12 +34,22 @@
       }
     },
     {
+      "task_key": "weekday_check",
+      "description": "Compute day_of_week and emit it as a task value; downstream tasks branch on it.",
+      "depends_on": [{"task_key": "medallion_pipeline"}],
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/<your-user>/databricks_learning/week_4_pipelines_and_jobs/code/05_weekday_check",
+        "source": "WORKSPACE"
+      },
+      "job_cluster_key": "main"
+    },
+    {
       "task_key": "weekday_audit",
       "description": "Only run a SQL audit on weekdays",
-      "depends_on": [{"task_key": "medallion_pipeline"}],
+      "depends_on": [{"task_key": "weekday_check"}],
       "condition_task": {
         "op": "LESS_THAN",
-        "left": "{{job.trigger.day_of_week}}",
+        "left":  "{{tasks.weekday_check.values.day_of_week}}",
         "right": "6"
       }
     },
@@ -51,7 +67,7 @@
     },
     {
       "task_key": "for_each_region",
-      "description": "Run a downstream notebook per region",
+      "description": "Run a downstream notebook per region. The inner notebook is a placeholder you author yourself.",
       "depends_on": [{"task_key": "medallion_pipeline"}],
       "for_each_task": {
         "inputs": "[\"EU\",\"NA\",\"APAC\",\"LATAM\",\"EMEA\"]",
@@ -59,7 +75,7 @@
         "task": {
           "task_key": "region_report",
           "notebook_task": {
-            "notebook_path": "/Workspace/Repos/your-user/databricks_learning/week_4_pipelines_and_jobs/code/05_region_report",
+            "notebook_path": "/Workspace/Users/<your-user>/databricks_learning/week_4_pipelines_and_jobs/code/06_region_report",
             "source": "WORKSPACE",
             "base_parameters": {
               "region": "{{input}}"
@@ -86,7 +102,7 @@
     "pause_status": "UNPAUSED"
   },
   "email_notifications": {
-    "on_failure": ["denis.khaskin@path-it.com"]
+    "on_failure": ["<your-email>@example.com"]
   },
   "max_concurrent_runs": 1
 }

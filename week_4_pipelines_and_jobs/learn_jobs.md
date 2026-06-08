@@ -27,7 +27,7 @@ Everything is natively integrated in a Databricks platform. It eliminates integr
 - Job: A primary container for scheduling and orchestrating tasks such as data processing, ETL, analytics and ML
 - Supported languages: Python, SQL, Scala, R, Java (JAR)
 - Running environment:
-    - **Interactive clusters:** development, testing, debugging
+    - **All-purpose clusters** (formerly "Interactive clusters"): development, testing, debugging
     - **Job clusters:** production (billed at the Jobs Compute DBU rate, lower than All-Purpose Compute)
     - **Serverless clusters:** better overall performance, fully managed
     - **SQL warehouse:** for SQL, dashboards, BI, etc.
@@ -39,8 +39,9 @@ Everything is natively integrated in a Databricks platform. It eliminates integr
 ## Task orchestration
 
 - **DAG:** directed acyclic graph, conceptual representation of a series of activities
-- **Orchestration:** ability to run tasks as DAG using UI, API, SDK or Asset Bundles
-- Examples: Sequence, Funnel (multipler inputs), Fan-out (multiple outputs)
+- **Orchestration:** ability to run tasks as DAG using UI, API, SDK or Declarative Automation Bundles (DAB,
+  formerly Databricks Asset Bundles)
+- Examples: Sequence, Funnel (multiple inputs), Fan-out (multiple outputs)
 
 ## Job scheduling and triggers
 
@@ -88,7 +89,7 @@ Everything is natively integrated in a Databricks platform. It eliminates integr
       `job_tasks`: task basic definition
       `job_run_timeline`: each job run over time
       `job_task_run_timeline`: each task run over time
-      `pipeline`: pipeline basic info
+      `pipelines`: pipeline basic info
 - **Spark UI:** detailed performance insights
     - Timeline analysis: task duration, overlap, bottlenecks
     - Task-Level details: run time, cluster, I/O, logs, etc.
@@ -98,7 +99,7 @@ Everything is natively integrated in a Databricks platform. It eliminates integr
 ## Production considerations
 
 - **Selecting compute:**
-    - Interactive clusters: for add-hoc analysis and development (fast start-up, costly, low scalability)
+    - All-purpose clusters: for ad-hoc analysis and development (fast start-up, costly, low scalability)
     - Job clusters: ideal for jobs (terminates if the job is finished, but start-up time is longer)
     - Serverless clusters: best overall performance (higher cost, lower start-up time, scalability)
 - **Pricing components:**
