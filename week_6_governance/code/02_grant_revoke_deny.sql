@@ -11,11 +11,15 @@ USE CATALOG dea_learning;
 
 -- Replace these placeholders with real principals in your account.
 
--- 1. Analysts: read-only on the gold layer
+-- 1. Analysts: read-only on the gold layer.
+-- The UC-idiomatic form: GRANT SELECT ON SCHEMA cascades to all current AND future
+-- tables / views / MVs in that schema. Use the per-object form (ON TABLE / ON VIEW) only
+-- when you want to scope to a specific object.
 -- GRANT USE CATALOG ON CATALOG dea_learning           TO `analysts`;
 -- GRANT USE SCHEMA  ON SCHEMA  dea_learning.gold      TO `analysts`;
--- GRANT SELECT       ON ALL TABLES IN SCHEMA dea_learning.gold TO `analysts`;
--- GRANT SELECT       ON ALL MATERIALIZED VIEWS IN SCHEMA dea_learning.gold TO `analysts`;
+-- GRANT SELECT      ON SCHEMA  dea_learning.gold      TO `analysts`;   -- cascades to all objects
+-- Per-object alternative (HMS-era syntax, still accepted):
+-- GRANT SELECT      ON ALL TABLES IN SCHEMA dea_learning.gold TO `analysts`;
 
 -- COMMAND ----------
 

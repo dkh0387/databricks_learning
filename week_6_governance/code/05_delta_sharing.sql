@@ -14,9 +14,11 @@ USE CATALOG dea_learning;
 -- 1. Share
 CREATE SHARE IF NOT EXISTS dea_revenue_share;
 
--- 2. Add tables / schemas / views
-ALTER SHARE dea_revenue_share ADD MATERIALIZED VIEW gold.gold_daily_revenue;
-ALTER SHARE dea_revenue_share ADD MATERIALIZED VIEW gold.gold_top_items;
+-- 2. Add tables / schemas / views.
+-- Materialized views are shared via ADD TABLE (the documented ALTER SHARE clauses are
+-- ADD TABLE / ADD SCHEMA / ADD VIEW / ADD VOLUME / ADD MODEL).
+ALTER SHARE dea_revenue_share ADD TABLE gold.gold_daily_revenue;
+ALTER SHARE dea_revenue_share ADD TABLE gold.gold_top_items;
 -- Do NOT share silver.silver_customers — contains PII.
 
 DESCRIBE SHARE dea_revenue_share;
@@ -37,9 +39,19 @@ SHOW ALL IN SHARE dea_revenue_share;
 
 -- COMMAND ----------
 
--- 5. Audit who is consuming
-SELECT * FROM system.information_schema.shares     WHERE share_name = 'dea_revenue_share';
-SELECT * FROM system.information_schema.recipients;
+-- 5. Inspect shares and recipients (the system.information_schema does NOT include
+-- shares/recipients — use SHOW commands and DESCRIBE; for usage trails query the audit log).
+SHOW SHARES;
+SHOW RECIPIENTS;
+DESCRIBE SHARE dea_revenue_share;
+
+-- Audit who actually accessed the share (consumer activity):
+SELECT event_time, user_identity.email, action_name, request_params
+FROM   system.access.audit
+WHERE  service_name = 'unityCatalog'
+  AND  action_name LIKE '%Share%'
+ORDER BY event_time DESC
+LIMIT 50;
 
 -- COMMAND ----------
 

@@ -13,13 +13,17 @@ USE CATALOG dea_learning;
 -- COMMAND ----------
 
 -- 1. Row filter — admins see everything; regional teams only their region; everyone else nothing.
+-- Covers every region the Week 3 silver_customers cleansing produces: EU, NA, APAC, LATAM, EMEA, OTHER.
 CREATE OR REPLACE FUNCTION sec.region_filter(region STRING)
 RETURNS BOOLEAN
 RETURN
   IS_ACCOUNT_GROUP_MEMBER('admins')
-  OR (IS_ACCOUNT_GROUP_MEMBER('eu_team')   AND region = 'EU')
-  OR (IS_ACCOUNT_GROUP_MEMBER('na_team')   AND region = 'NA')
-  OR (IS_ACCOUNT_GROUP_MEMBER('apac_team') AND region = 'APAC');
+  OR (IS_ACCOUNT_GROUP_MEMBER('eu_team')    AND region = 'EU')
+  OR (IS_ACCOUNT_GROUP_MEMBER('na_team')    AND region = 'NA')
+  OR (IS_ACCOUNT_GROUP_MEMBER('apac_team')  AND region = 'APAC')
+  OR (IS_ACCOUNT_GROUP_MEMBER('latam_team') AND region = 'LATAM')
+  OR (IS_ACCOUNT_GROUP_MEMBER('emea_team')  AND region = 'EMEA');
+  -- 'OTHER' is admin-only by design (no team owns it).
 
 ALTER TABLE silver.silver_customers
   SET ROW FILTER sec.region_filter ON (region);

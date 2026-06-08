@@ -8,7 +8,14 @@
 -- COMMAND ----------
 
 USE CATALOG dea_learning;
-CREATE VOLUME IF NOT EXISTS dea_learning.raw.archive;
+
+-- For a clean "files outlive table" lesson, prefer an EXTERNAL volume (cloud path you own).
+-- The managed-volume fallback below works for this conversion demo because the table itself
+-- is external — but the volume's own UC-managed lifecycle is unrelated to the table.
+-- CREATE EXTERNAL VOLUME IF NOT EXISTS dea_learning.raw.archive
+--   LOCATION '<CLOUD_PATH>/archive'
+--   WITH (STORAGE CREDENTIAL <STORAGE_CREDENTIAL>);
+CREATE VOLUME IF NOT EXISTS dea_learning.raw.archive;   -- fallback: managed volume
 
 -- COMMAND ----------
 
@@ -47,6 +54,9 @@ DESCRIBE EXTENDED silver.orders_archive;     -- Type = EXTERNAL again
 
 -- 4. Files behind the EXTERNAL table survive a DROP
 DROP TABLE silver.orders_archive;
+
+-- COMMAND ----------
+
 -- MAGIC %python
 -- MAGIC display(dbutils.fs.ls("/Volumes/dea_learning/raw/archive/orders_back"))
 

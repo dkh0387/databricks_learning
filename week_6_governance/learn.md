@@ -12,7 +12,7 @@ Single governance layer across all workspaces in an account: tables, files, ML m
 Account
 └── Metastore                (one per region, attached to N workspaces)
     ├── Catalog              (top of the 3-level namespace)
-    │   └── Schema           (= database)
+    │   └── Schema           (synonym: database)
     │       ├── Table        (managed | external)
     │       ├── View
     │       ├── Materialized View
@@ -52,10 +52,10 @@ Three-level namespace: `catalog.schema.object`. Replaces the two-level `database
 
 ```sql
 -- Managed (no LOCATION)
-CREATE TABLE main.sales.orders (id INT, total DOUBLE);
+CREATE TABLE dea_learning.silver.silver_orders (id INT, total DOUBLE);
 
 -- External (LOCATION required)
-CREATE TABLE main.sales.orders_ext (id INT, total DOUBLE)
+CREATE TABLE dea_learning.silver.orders_archive_ext (id INT, total DOUBLE)
 USING DELTA
 LOCATION 's3://my-bucket/sales/orders/';
 ```
@@ -64,10 +64,10 @@ LOCATION 's3://my-bucket/sales/orders/';
 
 ```sql
 -- external -> managed (recommended over CTAS: no downtime, keeps history, perms, name)
-ALTER TABLE main.sales.orders_ext SET MANAGED;
+ALTER TABLE dea_learning.silver.orders_archive_ext SET MANAGED;
 
 -- managed -> external (rollback)
-ALTER TABLE main.sales.orders UNSET MANAGED LOCATION 's3://bucket/path/';
+ALTER TABLE dea_learning.silver.silver_orders UNSET MANAGED LOCATION 's3://bucket/path/';
 ```
 
 ## Storage credentials and external locations
@@ -76,8 +76,12 @@ Required to read/write external data through UC.
 
 ```sql
 -- 1. Storage credential (admin only) wraps an IAM role / managed identity
+-- AWS:
 CREATE STORAGE CREDENTIAL prod_s3_cred
-  WITH (AWS_ROLE = 'arn:aws:iam::123456789012:role/databricks-uc');
+  WITH (IAM_ROLE 'arn:aws:iam::123456789012:role/databricks-uc');
+-- Azure managed identity equivalent:
+-- CREATE STORAGE CREDENTIAL prod_adls_cred
+--   WITH (AZURE_MANAGED_IDENTITY '/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.ManagedIdentity/userAssignedIdentities/<name>');
 
 -- 2. External location binds a path to a credential
 CREATE EXTERNAL LOCATION sales_landing
@@ -93,12 +97,12 @@ GRANT READ FILES, WRITE FILES ON EXTERNAL LOCATION sales_landing TO data_enginee
 Non-tabular file storage governed by UC. Use for ingestion landing zones, ML artifacts, libraries.
 
 ```sql
-CREATE VOLUME main.raw.landing;                 -- managed
-CREATE EXTERNAL VOLUME main.raw.legacy          -- external
+CREATE VOLUME dea_learning.raw.landing;                 -- managed
+CREATE EXTERNAL VOLUME dea_learning.raw.legacy          -- external
   LOCATION 's3://my-bucket/legacy/';
 ```
 
-Access via path: `/Volumes/main/raw/landing/file.csv`.
+Access via path: `/Volumes/dea_learning/raw/landing/file.csv`.
 
 ## Privilege model
 
@@ -120,33 +124,36 @@ Access via path: `/Volumes/main/raw/landing/file.csv`.
 
 ### Traversal rule
 
-To read `main.sales.orders` a user needs:
-`USE CATALOG` on `main` **and** `USE SCHEMA` on `main.sales` **and** `SELECT` on the table.
+To read `dea_learning.silver.silver_orders` a user needs:
+`USE CATALOG` on `main` **and** `USE SCHEMA` on `dea_learning.silver` **and** `SELECT` on the table.
 Grants on the parent **do not cascade** by default — you must grant at the correct level (or use ABAC, see below).
 
 ### `GRANT` / `REVOKE` / `DENY`
 
 ```sql
-GRANT USE CATALOG ON CATALOG main TO `analysts`;
-GRANT USE SCHEMA  ON SCHEMA main.sales TO `analysts`;
-GRANT SELECT       ON TABLE  main.sales.orders TO `analysts`;
+GRANT USE CATALOG ON CATALOG dea_learning TO `analysts`;
+GRANT USE SCHEMA  ON SCHEMA dea_learning.silver TO `analysts`;
+GRANT SELECT       ON TABLE  dea_learning.silver.silver_orders TO `analysts`;
 
-GRANT MODIFY ON TABLE main.sales.orders TO `data_engineers`;
-GRANT ALL PRIVILEGES ON SCHEMA main.sales TO `data_engineers`;
+GRANT MODIFY ON TABLE dea_learning.silver.silver_orders TO `data_engineers`;
+GRANT ALL PRIVILEGES ON SCHEMA dea_learning.silver TO `data_engineers`;
 
-REVOKE SELECT ON TABLE main.sales.orders FROM `analysts`;
+REVOKE SELECT ON TABLE dea_learning.silver.silver_orders FROM `analysts`;
 
 -- DENY overrides any GRANT, including inherited ones via groups
-DENY SELECT ON TABLE main.sales.orders TO `contractors`;
+DENY SELECT ON TABLE dea_learning.silver.silver_orders TO `contractors`;
 
-SHOW GRANTS ON TABLE main.sales.orders;
-SHOW GRANTS `analysts`;                        -- everything granted to a principal
+SHOW GRANTS ON TABLE dea_learning.silver.silver_orders;
+SHOW GRANTS `analysts` ON CATALOG dea_learning;   -- grants held by analysts inside this catalog
+
+-- For "every grant a principal holds across the metastore", query the privilege views:
+-- SELECT * FROM system.information_schema.table_privileges WHERE grantee = 'analysts';
 ```
 
 Ownership transfers the management right (cannot be revoked):
 
 ```sql
-ALTER TABLE main.sales.orders OWNER TO `data_platform_admins`;
+ALTER TABLE dea_learning.silver.silver_orders OWNER TO `data_platform_admins`;
 ```
 
 ## Row filters and column masks (manual, per-table)
@@ -156,33 +163,33 @@ Both are SQL UDFs attached to a table.
 ### Row filter — drops rows based on UDF returning `FALSE`
 
 ```sql
-CREATE FUNCTION main.sec.region_filter(region STRING)
+CREATE FUNCTION dea_learning.sec.region_filter(region STRING)
 RETURNS BOOLEAN
 RETURN
-  IS_ACCOUNT_GROUP_MEMBER('eu_team') AND region = 'EU'
-  OR IS_ACCOUNT_GROUP_MEMBER('us_team') AND region = 'US'
-  OR IS_ACCOUNT_GROUP_MEMBER('admins');
+  IS_ACCOUNT_GROUP_MEMBER('admins')
+  OR (IS_ACCOUNT_GROUP_MEMBER('eu_team') AND region = 'EU')
+  OR (IS_ACCOUNT_GROUP_MEMBER('us_team') AND region = 'US');
 
-ALTER TABLE main.sales.orders
-  SET ROW FILTER main.sec.region_filter ON (region);
+ALTER TABLE dea_learning.silver.silver_orders
+  SET ROW FILTER dea_learning.sec.region_filter ON (region);
 
 -- Remove
-ALTER TABLE main.sales.orders DROP ROW FILTER;
+ALTER TABLE dea_learning.silver.silver_orders DROP ROW FILTER;
 ```
 
 ### Column mask — transforms a value at read time
 
 ```sql
-CREATE FUNCTION main.sec.mask_email(email STRING)
+CREATE FUNCTION dea_learning.sec.mask_email(email STRING)
 RETURNS STRING
 RETURN
   CASE WHEN IS_ACCOUNT_GROUP_MEMBER('pii_readers') THEN email
        ELSE regexp_replace(email, '(^.)(.*)(@.*$)', '$1***$3') END;
 
-ALTER TABLE main.users.profiles
-  ALTER COLUMN email SET MASK main.sec.mask_email;
+ALTER TABLE dea_learning.silver.silver_customers
+  ALTER COLUMN email SET MASK dea_learning.sec.mask_email;
 
-ALTER TABLE main.users.profiles
+ALTER TABLE dea_learning.silver.silver_customers
   ALTER COLUMN email DROP MASK;
 ```
 
@@ -197,8 +204,8 @@ Apply one policy across many tables/columns by **tagging** them instead of alter
 Account-level vocabulary of `key` or `key:value` pairs. Attach to catalogs, schemas, tables, columns.
 
 ```sql
-APPLY TAG ('pii' = 'true')        ON COLUMN main.users.profiles.email;
-APPLY TAG ('classification' = 'restricted') ON TABLE main.sales.contracts;
+APPLY TAG ('pii' = 'true')        ON COLUMN dea_learning.silver.silver_customers.email;
+APPLY TAG ('classification' = 'restricted') ON TABLE dea_learning.silver.silver_orders;
 ```
 
 ### Policy components
@@ -221,7 +228,7 @@ System catalog (always on):
 ```sql
 SELECT * FROM system.access.audit
 WHERE action_name = 'getTable'
-  AND request_params.full_name_arg = 'main.sales.orders'
+  AND request_params.full_name_arg = 'dea_learning.silver.silver_orders'
 ORDER BY event_time DESC;
 ```
 
@@ -229,7 +236,7 @@ Key tables in `system.access`: `audit`, `table_lineage`, `column_lineage`.
 
 ## Data lineage
 
-Automatic for any query run on UC tables via a SQL warehouse or notebook (Spark 3.5+).
+Automatic for any query run on UC tables via a SQL warehouse or notebook on **DBR 11.3 LTS+**.
 
 - UI: open table in *Catalog Explorer* → *Lineage* tab → upstream / downstream graph at table and column level.
 - API: `system.access.table_lineage`, `system.access.column_lineage`.
@@ -241,8 +248,8 @@ Open protocol for read-only data sharing across orgs, clouds, regions — no dat
 ```sql
 -- Outbound (provider side)
 CREATE SHARE finance_share;
-ALTER SHARE finance_share ADD TABLE main.sales.orders;
-ALTER SHARE finance_share ADD SCHEMA main.public;
+ALTER SHARE finance_share ADD TABLE  dea_learning.silver.silver_orders;
+ALTER SHARE finance_share ADD SCHEMA dea_learning.gold;   -- schema-level: future objects too
 CREATE RECIPIENT partner_acme USING ID 'azure:eastus:abc-123';
 GRANT SELECT ON SHARE finance_share TO RECIPIENT partner_acme;
 
@@ -262,13 +269,13 @@ Limits: read-only, Delta/Parquet only, no row-filter/column-mask enforcement on 
 
 ```sql
 -- Inspect
-DESCRIBE TABLE EXTENDED main.sales.orders;     -- type, location, owner
-DESCRIBE DETAIL  main.sales.orders;             -- format, num files, size
-SHOW GRANTS ON TABLE main.sales.orders;
-SHOW TABLES IN main.sales;
+DESCRIBE TABLE EXTENDED dea_learning.silver.silver_orders;     -- type, location, owner
+DESCRIBE DETAIL  dea_learning.silver.silver_orders;             -- format, num files, size
+SHOW GRANTS ON TABLE dea_learning.silver.silver_orders;
+SHOW TABLES IN dea_learning.silver;
 
 -- Discover via system tables
-SELECT * FROM system.information_schema.tables WHERE table_catalog = 'main';
+SELECT * FROM system.information_schema.tables WHERE table_catalog = 'dea_learning';
 SELECT * FROM system.information_schema.table_privileges;
 ```
 
