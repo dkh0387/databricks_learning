@@ -17,7 +17,11 @@
     - HMS managed tables landed under `dbfs:/user/hive/warehouse/<tbl_name>`.
     - UC managed tables land under the catalog's or schema's **managed storage location** (cloud-bucket path
       configured in UC), *not* `dbfs:/user/hive/warehouse/`.
-    - `DESCRIBE DETAIL <tbl_name>` shows the actual physical location for any table.
+    - Inspecting a table:
+        - `DESCRIBE EXTENDED <tbl_name>` — table-level metadata: **Type** (`MANAGED` / `EXTERNAL`), **Owner**,
+          catalog, schema, comments, table properties.
+        - `DESCRIBE DETAIL <tbl_name>` — Delta-specific physical detail: **location**, `numFiles`, `sizeInBytes`,
+          `format`, `clusteringColumns`.
 - **Tables:** *managed vs. external* is orthogonal to *Delta vs. other formats*.
     - **Managed table** — metastore owns both metadata and underlying files. `DROP TABLE` deletes the files.
       `CREATE TABLE tbl_name (col_name data_type, ...)` (no `LOCATION`).
@@ -29,21 +33,43 @@
     - Creating:
         - CTAS: `CREATE TABLE tbl_name AS SELECT ... FROM ...`
     - Cloning:
-        - DEEP CLONE (full data copy, slow): `CREATE TABLE tbl_clone_name DEEP CLONE source_tbl_name`
-        - SHALLOW CLONE (metadata-only copy, fast, references source files):
+        - DEEP CLONE (full data copy, slow, independent of source after clone):
+          `CREATE TABLE tbl_clone_name DEEP CLONE source_tbl_name`
+        - SHALLOW CLONE (metadata-only, fast, references source data files — dependent on source's lifecycle):
           `CREATE TABLE tbl_clone_name SHALLOW CLONE source_tbl_name`
+        - Pin to a specific source version: `... CLONE source_tbl_name VERSION AS OF 12` or
+          `... CLONE source_tbl_name TIMESTAMP AS OF '2026-06-01T00:00:00'`
 - **Table Constraints:**
     - NOT NULL: column cannot contain null values
     - CHECK: column value must satisfy a given condition
     - `ALTER TABLE tbl_name ADD CONSTRAINT constraint_name CHECK (constraint_details)`
 - **Views:**
-    - Stored View: SQL query stored in a database (no physical data stored)
+    - Permanent view (just "view"): SQL query stored in a schema (no data stored; recomputed at query time).
       `CREATE VIEW view_name AS SELECT ... FROM ...`
-    - Temporary View: attached to a Spark session (open new notebook, start job run, etc.)
+    - Temporary view: attached to the current Spark session (gone when the notebook/job session ends).
       `CREATE TEMP VIEW view_name AS SELECT ... FROM ...`
-    - Global Temporary View: attached to a cluster within multiple sessions (restart cluster, etc.).
-      Those views are stored in `global_temp` database. Cannot be used on serverless clusters.
+    - Global temporary view: attached to a cluster across sessions; restart clears it.
+      Stored in the `global_temp` database. Not supported on serverless compute.
       `CREATE GLOBAL TEMP VIEW view_name AS SELECT ... FROM ...`
+    - Materialized view (covered in Week 3/4): stored, refresh-on-demand, BI-friendly. Cannot be a streaming source.
+
+# Compute services
+
+Exam §1 explicitly tests choosing the right compute for a workload. Four options:
+
+| Compute | Best for | Startup | DBU rate | Notes |
+| --- | --- | --- | --- | --- |
+| **All-purpose cluster** | Interactive dev, notebooks, ad-hoc analysis | 3–6 min (classic) | Highest | Shared across users; longer-lived. Pick this for development. |
+| **Job cluster** | Production scheduled jobs | 3–6 min (classic) | Lower (Jobs Compute rate) | Created per job run, terminated after. Cheaper than all-purpose for the same workload. |
+| **Serverless compute** (jobs / notebooks / pipelines) | Both dev and prod | Seconds | Bundled (compute + infra in one DBU rate) | Fully managed by Databricks. No cluster config. Use unless you have a hard dependency on instance type / init scripts. |
+| **SQL warehouse** (classic, pro, serverless) | SQL queries, BI dashboards | Classic: minutes · Pro/Serverless: seconds | Varies by tier | Optimized for SQL workloads. Pick **serverless SQL warehouse** for BI by default. |
+
+Decision shortcuts the exam likes:
+- "Need fast startup for an ad-hoc query by an analyst" → **Serverless SQL warehouse**.
+- "Scheduled nightly ETL job, cost-sensitive" → **Job cluster** (or serverless jobs if available).
+- "Notebook development, lots of iteration on one dataset" → **All-purpose cluster** (or serverless notebooks).
+- "Lakeflow Declarative Pipeline" → defaults to **serverless** — recommended.
+- "Many concurrent users running short SQL queries" → **Serverless SQL warehouse with autoscaling**.
 
 # Delta Lake Basics
 
@@ -59,8 +85,12 @@
         - `OPTIMIZE tbl_name ZORDER BY col_name`
         - adding new data requires recomputing Z-Order Index and recreating parquet files
     - Liquid Clustering:
-        - improved version of Z-Order Index
-        - Incremental optimization: files already clustered are being ignored
-        - Hint: use frequently used columns in WHERE for clustering; otherwise use automatic clustering ("Predictive
-          Optimization" on Unity Catalog is ON): `CREATE TABLE tbl_name CLUSTER BY AUTO`
-        - `CREATE TABLE tbl_name CLUSTER BY (col_name, col_name, ...)`
+        - improved, incremental successor to Z-Order. Files already clustered are skipped on subsequent OPTIMIZE runs.
+        - **Explicit keys** — pick columns frequently used in `WHERE` / join predicates:
+          `CREATE TABLE tbl_name CLUSTER BY (col_name, col_name, ...)`
+        - **Automatic Liquid Clustering** (`CLUSTER BY AUTO`) — **requires Predictive Optimization**, which
+          observes the table's query workload and selects clustering keys for you. UC managed tables only,
+          DBR 15.4 LTS+:
+          `CREATE TABLE tbl_name CLUSTER BY AUTO`
+        - Change keys later with `ALTER TABLE tbl_name CLUSTER BY (...)` followed by `OPTIMIZE tbl_name FULL`
+          to rewrite the layout.

@@ -8,14 +8,14 @@
 | **Delta log** | Ordered JSON records of every change to a Delta table — enables time travel and concurrent reads/writes. |
 | **Parquet** | Columnar file format Delta tables use under the hood. |
 | **Unity Catalog (UC)** | Account-level governance layer for tables, files, ML models, AI assets. Default for new workspaces. |
-| **Hive Metastore (HMS)** | Legacy workspace-scoped metastore. Exposed as the `hive_metastore` catalog. Deprecated. |
+| **Hive Metastore (HMS)** | Legacy workspace-scoped metastore. Still available as the `hive_metastore` catalog for backwards compatibility, but not recommended for new content — use Unity Catalog. |
 | **Catalog** | Top level of the UC three-level namespace (`catalog.schema.object`). |
 | **Schema (database)** | Container of tables/views/functions/volumes inside a catalog. SQL keywords `SCHEMA` and `DATABASE` are aliases. |
 | **Three-level namespace** | `catalog.schema.object` — replaces the HMS two-level `database.table`. |
 | **Managed table** | Metastore owns metadata AND files. `DROP TABLE` deletes the data. |
 | **External table** | Metastore owns metadata only; files live at a caller-given path. `DROP TABLE` keeps the data. |
 | **Volume** | UC securable for non-tabular files (managed or external). |
-| **DBFS** | Databricks File System — legacy mount. UC volumes preferred. |
+| **DBFS** | Databricks File System abstraction. The **DBFS root** (`dbfs:/`) is deprecated for new content — use UC Volumes (`/Volumes/...`). DBFS mounts to external storage still work but are also superseded by UC external locations. |
 | **DBR** | Databricks Runtime — the Spark/Photon version on a cluster. |
 | **DBU** | Databricks Unit — the billing unit for compute (rate varies by workload). |
 | **All-purpose cluster** | Interactive cluster for ad-hoc work; higher DBU rate. |

@@ -34,10 +34,10 @@ SELECT
 
 -- Three-level namespace in action
 USE CATALOG dea_learning;
-USE SCHEMA  default;
+USE SCHEMA  bronze;
 
--- This now resolves as dea_learning.bronze.my_table (if it exists)
--- SELECT * FROM my_table LIMIT 10;
+-- Unqualified names now resolve under dea_learning.bronze
+-- SELECT * FROM customers_bronze LIMIT 10;     -- after Week 2 has run
 
 -- COMMAND ----------
 
