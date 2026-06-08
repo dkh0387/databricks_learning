@@ -5,7 +5,7 @@
 
 -- COMMAND ----------
 
-USE main.learn;
+USE dea_learning.playground;
 
 CREATE OR REPLACE TABLE events (
   id        BIGINT,

@@ -1,71 +1,60 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # Week 3 · Bronze → Silver cleansing
-# MAGIC Null handling, type casting, string hygiene, and deterministic dedup with `row_number()`.
+# MAGIC # Week 3 · Bronze → Silver — customers
+# MAGIC Clean nulls, normalize types, dedup. Outputs `dea_learning.silver.customers_silver`.
 
 # COMMAND ----------
 
 from pyspark.sql import functions as F
 from pyspark.sql.window import Window
 
-CATALOG = "main"
-SCHEMA  = "learn"
-spark.sql(f"CREATE SCHEMA IF NOT EXISTS {CATALOG}.{SCHEMA}")
+CATALOG = "dea_learning"
 
 # COMMAND ----------
 
-# Build a messy bronze
-bronze = spark.createDataFrame([
-    (1, " Anna ",   "2500",  "Paris",   "2026-06-01", None),
-    (2, "Thomas",   "3000",  "LONDON",  "2026-06-01", None),
-    (3, "Bilal",    "abc",   "paris",   "2026-06-01", "duplicate"),
-    (3, "Bilal",    "3500",  "Paris",   "2026-06-02", "newer"),     # same id, newer date
-    (4, None,       "2000",  "Paris",   "2026-06-01", None),
-    (5, "Sophie",   None,    "London",  "2026-06-01", None),
-], "id INT, name STRING, salary_str STRING, city STRING, updated_at_str STRING, note STRING")
-
+# Start from the bronze landed by Week 2
+bronze = spark.table(f"{CATALOG}.bronze.customers_bronze")
 display(bronze)
 
 # COMMAND ----------
 
-# 1) Type casting + string hygiene
+# 1. Type casting + string hygiene + region derivation
 silver_typed = (bronze
-    .withColumn("salary",     F.col("salary_str").cast("double"))        # "abc" → null
-    .withColumn("updated_at", F.to_date("updated_at_str", "yyyy-MM-dd"))
-    .withColumn("name",       F.initcap(F.trim("name")))
-    .withColumn("city",       F.initcap(F.trim("city")))
-    .drop("salary_str", "updated_at_str", "note")
+    .withColumn("customer_id", F.col("customer_id").cast("bigint"))
+    .withColumn("signup_date", F.to_date("signup_date", "yyyy-MM-dd"))
+    .withColumn("name",        F.initcap(F.trim("name")))
+    .withColumn("email",       F.lower(F.trim("email")))
+    .withColumn("country",     F.upper(F.trim("country")))
+    .withColumn("region",
+        F.when(F.col("country").isin("DE","FR","IT","ES","NL","PL","IE","SE","CZ","AT","BE","DK","FI"), "EU")
+         .when(F.col("country").isin("US","CA"),                                                         "NA")
+         .when(F.col("country").isin("JP","CN","IN","SG","AU","KR"),                                      "APAC")
+         .when(F.col("country").isin("BR","MX","AR","CL","CO"),                                           "LATAM")
+         .when(F.col("country").isin("AE","SA","EG","ZA"),                                                "EMEA")
+         .otherwise("OTHER"))
 )
 
-display(silver_typed)
-
 # COMMAND ----------
 
-# 2) Null handling
-no_critical_nulls = silver_typed.dropna(subset=["id", "name", "updated_at"])
-filled            = silver_typed.fillna({"salary": 0.0, "name": "unknown"})
+# 2. Drop rows missing the natural key or critical fields
+silver_typed = silver_typed.dropna(subset=["customer_id", "email"])
 
-print("After dropna critical:", no_critical_nulls.count())
-print("After fillna:         ", filled.count())
+# 3. Deterministic dedup — keep most recent row per customer_id (latest signup_date wins)
+w = Window.partitionBy("customer_id").orderBy(F.desc("signup_date"))
 
-# COMMAND ----------
-
-# 3) Deterministic dedup: keep latest row per id
-w = Window.partitionBy("id").orderBy(F.desc("updated_at"))
-
-silver = (silver_typed
+customers_silver = (silver_typed
     .withColumn("rn", F.row_number().over(w))
     .filter("rn = 1")
     .drop("rn"))
 
-display(silver)
+display(customers_silver.orderBy("customer_id"))
 
 # COMMAND ----------
 
-# Write silver
-(silver.write
-   .mode("overwrite")
-   .option("overwriteSchema", "true")
-   .saveAsTable(f"{CATALOG}.{SCHEMA}.employees_silver"))
+# Write to silver
+(customers_silver.write
+    .mode("overwrite")
+    .option("overwriteSchema", "true")
+    .saveAsTable(f"{CATALOG}.silver.customers_silver"))
 
-spark.sql(f"SELECT * FROM {CATALOG}.{SCHEMA}.employees_silver").show()
+spark.sql(f"SELECT count(*) AS rows FROM {CATALOG}.silver.customers_silver").show()

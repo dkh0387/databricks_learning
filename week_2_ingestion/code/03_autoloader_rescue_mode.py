@@ -1,41 +1,31 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # Week 2 · Auto Loader — `rescue` mode and `_rescued_data`
-# MAGIC `rescue` never evolves the schema; unmatched fields land in `_rescued_data`. Inspect it to catch upstream drift.
+# MAGIC # Week 2 · Auto Loader — `rescue` mode against `orders_drift.json`
+# MAGIC `orders_drift.json` was crafted with:
+# MAGIC * a row where `amount` is the string `"not-a-number"` (type mismatch),
+# MAGIC * a row where `status` was uppercased into `Status` (case mismatch),
+# MAGIC * rows with extra fields (`channel`, `referral_code`) the schema doesn't know about.
+# MAGIC
+# MAGIC `rescue` mode keeps every row and captures the drift inside `_rescued_data`.
 
 # COMMAND ----------
 
-CATALOG = "main"
-SCHEMA  = "learn"
-VOL     = "landing"
-TARGET  = f"{CATALOG}.{SCHEMA}.orders_rescue"
+CATALOG = "dea_learning"
+TARGET  = f"{CATALOG}.bronze.orders_bronze_rescue"
 
-LANDING     = f"/Volumes/{CATALOG}/{SCHEMA}/{VOL}/rescue_orders"
-SCHEMA_PATH = f"/Volumes/{CATALOG}/{SCHEMA}/{VOL}/_checkpoints/rescue_orders/schema"
-CHECKPOINT  = f"/Volumes/{CATALOG}/{SCHEMA}/{VOL}/_checkpoints/rescue_orders/checkpoint"
-
-spark.sql(f"CREATE SCHEMA IF NOT EXISTS {CATALOG}.{SCHEMA}")
-spark.sql(f"CREATE VOLUME IF NOT EXISTS {CATALOG}.{SCHEMA}.{VOL}")
+LANDING     = f"/Volumes/{CATALOG}/raw/landing/orders_drift"
+SCHEMA_PATH = f"/Volumes/{CATALOG}/raw/landing/_checkpoints/orders_rescue/schema"
+CHECKPOINT  = f"/Volumes/{CATALOG}/raw/landing/_checkpoints/orders_rescue/checkpoint"
 
 # COMMAND ----------
 
-# Seed with one canonical-schema file plus one drift file
-dbutils.fs.put(f"{LANDING}/orders_001.json",
-               '{"id":1,"amount":9.99,"region":"EU"}',
-               overwrite=True)
-dbutils.fs.put(f"{LANDING}/orders_drift.json",
-               '{"id":2,"amount":"not-a-number","region":"US","unexpected_field":"xyz"}',
-               overwrite=True)
-
-# COMMAND ----------
-
-# Rescue mode — pin amount type so the type mismatch is captured rather than silently coerced
 (spark.readStream
    .format("cloudFiles")
    .option("cloudFiles.format", "json")
    .option("cloudFiles.schemaLocation", SCHEMA_PATH)
    .option("cloudFiles.schemaEvolutionMode", "rescue")
-   .option("cloudFiles.schemaHints", "amount DOUBLE")
+   .option("cloudFiles.schemaHints",
+           "order_id BIGINT, customer_id BIGINT, amount DOUBLE, status STRING, currency STRING")
    .load(LANDING)
    .writeStream
    .option("checkpointLocation", CHECKPOINT)
@@ -45,17 +35,19 @@ dbutils.fs.put(f"{LANDING}/orders_drift.json",
 
 # COMMAND ----------
 
-# All rows landed — drift is preserved inside _rescued_data
+# Every row landed — drift preserved in _rescued_data
 display(spark.sql(f"""
-  SELECT id, amount, region, _rescued_data, _metadata.file_path
+  SELECT order_id, customer_id, amount, status, _rescued_data, _metadata.file_name AS source_file
   FROM   {TARGET}
 """))
 
 # COMMAND ----------
 
-# Operational query: surface any file with rescued data so an engineer can investigate
+# Operational query: surface every row whose source file produced rescued data
 display(spark.sql(f"""
-  SELECT DISTINCT _metadata.file_path AS file_path, _rescued_data
+  SELECT _metadata.file_path AS file_path,
+         count(*)             AS rescued_rows
   FROM   {TARGET}
   WHERE  _rescued_data IS NOT NULL
+  GROUP BY _metadata.file_path
 """))

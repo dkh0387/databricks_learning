@@ -1,48 +1,38 @@
 -- Databricks notebook source
 -- MAGIC %md
--- MAGIC # Week 6 · Row filters and column masks
+-- MAGIC # Week 6 · Row filters and column masks on `silver_customers`
+-- MAGIC * Row filter by `region` — each regional team sees only their customers.
+-- MAGIC * Column mask on `email` — only `pii_readers` see the real address.
+-- MAGIC
 -- MAGIC Manual per-table approach. For account-wide rules see `04_abac_tagging.sql`.
 
 -- COMMAND ----------
 
-CREATE SCHEMA IF NOT EXISTS main.sec;
-USE main.learn;
-
-CREATE OR REPLACE TABLE customers (
-  id     INT,
-  email  STRING,
-  region STRING,
-  spend  DOUBLE
-);
-
-INSERT INTO customers VALUES
-  (1, 'anna@x.com',   'EU', 1200),
-  (2, 'bob@y.com',    'US', 4500),
-  (3, 'carlos@z.com', 'EU', 800),
-  (4, 'dora@w.com',   'APAC', 6700);
+USE CATALOG dea_learning;
 
 -- COMMAND ----------
 
--- 1. Row filter — admins see everything; EU/US teams see only their region.
-CREATE OR REPLACE FUNCTION main.sec.region_filter(region STRING)
+-- 1. Row filter — admins see everything; regional teams only their region; everyone else nothing.
+CREATE OR REPLACE FUNCTION sec.region_filter(region STRING)
 RETURNS BOOLEAN
 RETURN
   IS_ACCOUNT_GROUP_MEMBER('admins')
-  OR (IS_ACCOUNT_GROUP_MEMBER('eu_team') AND region = 'EU')
-  OR (IS_ACCOUNT_GROUP_MEMBER('us_team') AND region = 'US');
+  OR (IS_ACCOUNT_GROUP_MEMBER('eu_team')   AND region = 'EU')
+  OR (IS_ACCOUNT_GROUP_MEMBER('na_team')   AND region = 'NA')
+  OR (IS_ACCOUNT_GROUP_MEMBER('apac_team') AND region = 'APAC');
 
-ALTER TABLE main.learn.customers
-  SET ROW FILTER main.sec.region_filter ON (region);
-
--- COMMAND ----------
-
--- Verify (you should only see rows your group can see)
-SELECT * FROM main.learn.customers;
+ALTER TABLE silver.silver_customers
+  SET ROW FILTER sec.region_filter ON (region);
 
 -- COMMAND ----------
 
--- 2. Column mask — partial-mask email unless the caller is in `pii_readers`
-CREATE OR REPLACE FUNCTION main.sec.mask_email(email STRING)
+-- Verify — you should only see rows for the regions your group can access
+SELECT * FROM silver.silver_customers ORDER BY customer_id;
+
+-- COMMAND ----------
+
+-- 2. Column mask — partial-mask email unless caller is in `pii_readers`
+CREATE OR REPLACE FUNCTION sec.mask_email(email STRING)
 RETURNS STRING
 RETURN
   CASE
@@ -50,15 +40,15 @@ RETURN
     ELSE regexp_replace(email, '(^.)(.*)(@.*$)', '$1***$3')
   END;
 
-ALTER TABLE main.learn.customers
-  ALTER COLUMN email SET MASK main.sec.mask_email;
+ALTER TABLE silver.silver_customers
+  ALTER COLUMN email SET MASK sec.mask_email;
 
 -- COMMAND ----------
 
-SELECT * FROM main.learn.customers;
+SELECT customer_id, name, email, region FROM silver.silver_customers ORDER BY customer_id;
 
 -- COMMAND ----------
 
--- Remove the filter and mask if you want to clean up
--- ALTER TABLE main.learn.customers DROP ROW FILTER;
--- ALTER TABLE main.learn.customers ALTER COLUMN email DROP MASK;
+-- Cleanup (uncomment to remove)
+-- ALTER TABLE silver.silver_customers DROP ROW FILTER;
+-- ALTER TABLE silver.silver_customers ALTER COLUMN email DROP MASK;

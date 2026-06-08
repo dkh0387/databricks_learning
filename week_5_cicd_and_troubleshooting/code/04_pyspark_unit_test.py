@@ -1,62 +1,79 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # Week 5 · Unit testing PySpark transformations
-# MAGIC Uses `pyspark.testing.utils` — works inside a notebook and inside a CI-runner pytest.
+# MAGIC # Week 5 · Unit testing the silver transformation
+# MAGIC Tests the customer-cleansing function used in Week 3. Uses `pyspark.testing.utils` —
+# MAGIC works inside a notebook and inside a CI-runner pytest.
 
 # COMMAND ----------
 
-from pyspark.sql import SparkSession, functions as F
+from pyspark.sql import functions as F
+from pyspark.sql.window import Window
 from pyspark.testing.utils import assertDataFrameEqual, assertSchemaEqual
 
-# The function under test
+# The function under test (mirrors week_3_transformation/code/01_silver_cleansing.py)
 def normalize_customers(df):
-    """Trim and title-case names, lower-case emails, drop rows without an id."""
-    return (df
-        .filter(F.col("id").isNotNull())
-        .withColumn("name",  F.initcap(F.trim(F.col("name"))))
-        .withColumn("email", F.lower(F.col("email"))))
+    """Clean nulls, normalise case, dedup by customer_id keeping latest signup_date."""
+    typed = (df
+        .withColumn("customer_id", F.col("customer_id").cast("bigint"))
+        .withColumn("signup_date", F.to_date("signup_date", "yyyy-MM-dd"))
+        .withColumn("name",        F.initcap(F.trim("name")))
+        .withColumn("email",       F.lower(F.trim("email")))
+        .withColumn("country",     F.upper(F.trim("country"))))
+    no_nulls = typed.dropna(subset=["customer_id", "email"])
+    w = Window.partitionBy("customer_id").orderBy(F.desc("signup_date"))
+    return (no_nulls
+        .withColumn("rn", F.row_number().over(w))
+        .filter("rn = 1")
+        .drop("rn"))
 
 # COMMAND ----------
 
 # Test 1 — happy path
 def test_normalize_basic():
     input_df = spark.createDataFrame([
-        (1, " anna ", "ANNA@X.COM"),
-        (2, "thomas", "Thomas@x.com"),
-    ], "id INT, name STRING, email STRING")
+        (1, " Anna Müller ", "ANNA.MULLER@example.com", "de", "2025-01-15"),
+        (2, "Bob Johnson",   "Bob.Johnson@Example.com", "us", "2025-02-20"),
+    ], "customer_id BIGINT, name STRING, email STRING, country STRING, signup_date STRING")
 
     expected = spark.createDataFrame([
-        (1, "Anna",   "anna@x.com"),
-        (2, "Thomas", "thomas@x.com"),
-    ], "id INT, name STRING, email STRING")
+        (1, "Anna Müller",  "anna.muller@example.com", "DE", "2025-01-15"),
+        (2, "Bob Johnson",  "bob.johnson@example.com", "US", "2025-02-20"),
+    ], "customer_id BIGINT, name STRING, email STRING, country STRING, signup_date STRING") \
+       .withColumn("signup_date", F.to_date("signup_date"))
 
     assertDataFrameEqual(normalize_customers(input_df), expected)
     print("test_normalize_basic ✓")
 
-# Test 2 — null-id row is dropped
-def test_normalize_drops_null_id():
+# Test 2 — row without an email is dropped
+def test_normalize_drops_missing_email():
     input_df = spark.createDataFrame([
-        (1,    "anna",  "a@x.com"),
-        (None, "ghost", "g@x.com"),
-    ], "id INT, name STRING, email STRING")
+        (1, "Anna",  "anna@x.com", "DE", "2025-01-15"),
+        (2, "Ghost", None,         "DE", "2025-02-20"),
+    ], "customer_id BIGINT, name STRING, email STRING, country STRING, signup_date STRING")
 
     result = normalize_customers(input_df)
     assert result.count() == 1, f"expected 1 row, got {result.count()}"
-    print("test_normalize_drops_null_id ✓")
+    print("test_normalize_drops_missing_email ✓")
 
-# Test 3 — schema unchanged
-def test_normalize_preserves_schema():
-    input_df = spark.createDataFrame([], "id INT, name STRING, email STRING")
-    assertSchemaEqual(normalize_customers(input_df).schema, input_df.schema)
-    print("test_normalize_preserves_schema ✓")
+# Test 3 — duplicate customer_id is deduplicated to the latest signup_date
+def test_normalize_dedupes_to_latest():
+    input_df = spark.createDataFrame([
+        (1, "Anna Old", "anna@x.com", "DE", "2025-01-15"),
+        (1, "Anna New", "anna@x.com", "DE", "2025-06-01"),
+    ], "customer_id BIGINT, name STRING, email STRING, country STRING, signup_date STRING")
+
+    result = normalize_customers(input_df).collect()
+    assert len(result) == 1
+    assert result[0]["name"] == "Anna New"
+    print("test_normalize_dedupes_to_latest ✓")
 
 test_normalize_basic()
-test_normalize_drops_null_id()
-test_normalize_preserves_schema()
+test_normalize_drops_missing_email()
+test_normalize_dedupes_to_latest()
 
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC ### Running from CI
-# MAGIC Move the function and tests into `src/transform.py` and `tests/test_transform.py`.
-# MAGIC Then `pytest tests/` in your CI runner — `pyspark.testing.utils` works headless.
+# MAGIC Move `normalize_customers` into `src/transform.py` and the tests into `tests/test_transform.py`,
+# MAGIC then `pytest tests/` in your CI runner — `pyspark.testing.utils` works headless.

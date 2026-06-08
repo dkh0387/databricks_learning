@@ -1,78 +1,55 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # Week 2 · Auto Loader — incremental batch (`availableNow`)
-# MAGIC Same primitives as streaming but processes whatever's pending and stops. Ideal for hourly/daily Jobs.
+# MAGIC # Week 2 · Auto Loader — orders into bronze (incremental batch via `availableNow`)
+# MAGIC Three JSON files arrive over three days; the third one adds a `discount_amount` field so you can observe
+# MAGIC `addNewColumns` schema evolution end-to-end.
 
 # COMMAND ----------
 
-CATALOG = "main"
-SCHEMA  = "learn"
-VOL     = "landing"
-TARGET  = f"{CATALOG}.{SCHEMA}.orders_bronze_al"
+CATALOG = "dea_learning"
+TARGET  = f"{CATALOG}.bronze.orders_bronze"
 
-LANDING       = f"/Volumes/{CATALOG}/{SCHEMA}/{VOL}/al_orders"
-SCHEMA_PATH   = f"/Volumes/{CATALOG}/{SCHEMA}/{VOL}/_checkpoints/al_orders/schema"
-CHECKPOINT    = f"/Volumes/{CATALOG}/{SCHEMA}/{VOL}/_checkpoints/al_orders/checkpoint"
-
-spark.sql(f"CREATE SCHEMA IF NOT EXISTS {CATALOG}.{SCHEMA}")
-spark.sql(f"CREATE VOLUME IF NOT EXISTS {CATALOG}.{SCHEMA}.{VOL}")
+LANDING     = f"/Volumes/{CATALOG}/raw/landing/orders"
+SCHEMA_PATH = f"/Volumes/{CATALOG}/raw/landing/_checkpoints/orders/schema"
+CHECKPOINT  = f"/Volumes/{CATALOG}/raw/landing/_checkpoints/orders/checkpoint"
 
 # COMMAND ----------
-
-# Seed three files
-for fname, body in [
-    ("orders_001.json", '{"id":1,"amount":9.99,"region":"EU"}'),
-    ("orders_002.json", '{"id":2,"amount":19.99,"region":"US"}'),
-    ("orders_003.json", '{"id":3,"amount":4.99,"region":"EU"}'),
-]:
-    dbutils.fs.put(f"{LANDING}/{fname}", body, overwrite=True)
-
-# COMMAND ----------
-
-# First run — Auto Loader infers schema, lands rows, exits
-(spark.readStream
-   .format("cloudFiles")
-   .option("cloudFiles.format", "json")
-   .option("cloudFiles.schemaLocation", SCHEMA_PATH)
-   .load(LANDING)
-   .writeStream
-   .option("checkpointLocation", CHECKPOINT)
-   .trigger(availableNow=True)
-   .toTable(TARGET)
-   .awaitTermination())
-
-display(spark.table(TARGET))
-
-# COMMAND ----------
-
-# Re-run with no new files — does nothing
-(spark.readStream
-   .format("cloudFiles")
-   .option("cloudFiles.format", "json")
-   .option("cloudFiles.schemaLocation", SCHEMA_PATH)
-   .load(LANDING)
-   .writeStream
-   .option("checkpointLocation", CHECKPOINT)
-   .trigger(availableNow=True)
-   .toTable(TARGET)
-   .awaitTermination())
-
-print("Row count after no-op:", spark.table(TARGET).count())
-
-# COMMAND ----------
-
-# Drop a NEW file with a new column → schema evolution
-dbutils.fs.put(f"{LANDING}/orders_004.json",
-               '{"id":4,"amount":29.99,"region":"DE","currency":"EUR"}',
-               overwrite=True)
 
 # MAGIC %md
-# MAGIC With the default `addNewColumns` evolution mode, this run **will fail once** with
-# MAGIC `UnknownFieldException` — by design. The schema location is updated; the next run picks up `currency`.
+# MAGIC ### Run 1 — only `orders_2026-06-01.json` and `orders_2026-06-02.json` are present
+# MAGIC Auto Loader infers the schema (including the nested `items` array of structs), lands rows, exits.
 
 # COMMAND ----------
 
-# Expect failure on this run
+(spark.readStream
+   .format("cloudFiles")
+   .option("cloudFiles.format", "json")
+   .option("cloudFiles.schemaLocation", SCHEMA_PATH)
+   .option("cloudFiles.schemaHints", "order_id BIGINT, customer_id BIGINT, amount DOUBLE, order_ts TIMESTAMP")
+   .load(LANDING)
+   .writeStream
+   .option("checkpointLocation", CHECKPOINT)
+   .trigger(availableNow=True)
+   .toTable(TARGET)
+   .awaitTermination())
+
+display(spark.sql(f"""
+  SELECT order_id, customer_id, status, currency, amount,
+         size(items) AS line_item_count,
+         _metadata.file_name AS source
+  FROM   {TARGET}
+  ORDER BY order_id
+"""))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Run 2 — `orders_2026-06-03.json` arrives with the new `discount_amount` field
+# MAGIC With the default `addNewColumns` evolution mode this run **fails once** with `UnknownFieldException` — by design.
+# MAGIC The schema location is updated; the next run picks up the new column.
+
+# COMMAND ----------
+
 try:
     (spark.readStream
        .format("cloudFiles")
@@ -85,11 +62,16 @@ try:
        .toTable(TARGET)
        .awaitTermination())
 except Exception as e:
-    print("Caught expected failure:", type(e).__name__, str(e)[:200])
+    print("Caught expected failure:", type(e).__name__)
+    print(str(e)[:200])
 
 # COMMAND ----------
 
-# Second run picks up the new column
+# MAGIC %md
+# MAGIC ### Run 3 — restart picks up the new column and ingests day 3
+
+# COMMAND ----------
+
 (spark.readStream
    .format("cloudFiles")
    .option("cloudFiles.format", "json")
@@ -101,4 +83,9 @@ except Exception as e:
    .toTable(TARGET)
    .awaitTermination())
 
-display(spark.table(TARGET))
+display(spark.sql(f"""
+  SELECT order_id, customer_id, status, amount, discount_amount,
+         _metadata.file_name AS source
+  FROM   {TARGET}
+  ORDER BY order_id
+"""))

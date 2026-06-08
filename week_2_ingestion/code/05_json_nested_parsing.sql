@@ -1,70 +1,82 @@
 -- Databricks notebook source
 -- MAGIC %md
--- MAGIC # Week 2 · JSON & nested data
--- MAGIC Three idioms: schema-on-read via `read_files`, `from_json` against a stringified column, and VARIANT.
+-- MAGIC # Week 2 · JSON & nested data — orders.items
+-- MAGIC The orders payload has a nested `items: ARRAY<STRUCT<...>>`. Three idioms for working with it:
+-- MAGIC schema-on-read (`read_files`), `from_json` against a stringified column, and VARIANT.
 
 -- COMMAND ----------
 
-CREATE SCHEMA IF NOT EXISTS main.learn;
+-- 1. Schema-on-read — Auto Loader / read_files sees the nested struct
+SELECT order_id, customer_id, amount, items
+FROM   read_files('/Volumes/dea_learning/raw/landing/orders', format => 'json')
+LIMIT 5;
 
 -- COMMAND ----------
 
--- Sample nested JSON in a single string column
-CREATE OR REPLACE TEMP VIEW raw_payloads AS
-SELECT *
-FROM VALUES
-  (1, '{"customer":{"id":100,"email":"a@x.com"},"items":[{"sku":"A","qty":2},{"sku":"B","qty":1}]}'),
-  (2, '{"customer":{"id":101,"email":"b@x.com"},"items":[{"sku":"C","qty":5}]}')
-AS t(event_id, payload);
-
-SELECT * FROM raw_payloads;
+-- 2. Explode the items array → one row per line item (this is what silver does)
+SELECT
+  order_id,
+  customer_id,
+  amount  AS order_amount,
+  item.item_id,
+  item.quantity,
+  item.unit_price,
+  item.quantity * item.unit_price AS line_total
+FROM   read_files('/Volumes/dea_learning/raw/landing/orders', format => 'json')
+LATERAL VIEW explode(items) AS item;
 
 -- COMMAND ----------
 
--- Parse with from_json against an explicit schema
+-- 3. from_json against a stringified payload (when the JSON arrived as a STRING column)
+WITH raw AS (
+  SELECT
+    1001 AS event_id,
+    '{"order_id":1001,"customer_id":1,"items":[{"item_id":"SKU-A001","quantity":2,"unit_price":29.99}]}' AS payload
+)
 SELECT
   event_id,
-  parsed.customer.id    AS customer_id,
-  parsed.customer.email AS customer_email,
-  parsed.items          AS items_array
+  parsed.order_id,
+  parsed.customer_id,
+  parsed.items
 FROM (
-  SELECT event_id,
-         from_json(payload,
-           'STRUCT<customer: STRUCT<id: BIGINT, email: STRING>,
-                   items: ARRAY<STRUCT<sku: STRING, qty: INT>>>') AS parsed
-  FROM raw_payloads
+  SELECT
+    event_id,
+    from_json(payload,
+      'STRUCT<order_id: BIGINT,
+              customer_id: BIGINT,
+              items: ARRAY<STRUCT<item_id: STRING, quantity: INT, unit_price: DOUBLE>>>') AS parsed
+  FROM raw
 );
 
 -- COMMAND ----------
 
--- Explode the items array — one row per item
-SELECT event_id, item.sku, item.qty
-FROM (
-  SELECT event_id,
-         explode(from_json(payload,
-           'STRUCT<customer: STRUCT<id: BIGINT, email: STRING>,
-                   items: ARRAY<STRUCT<sku: STRING, qty: INT>>>').items) AS item
-  FROM raw_payloads
+-- 4. Lightweight extraction without parsing the whole structure
+WITH raw AS (
+  SELECT '{"order_id":1001,"customer_id":1,"amount":139.97}' AS payload
+)
+SELECT
+  get_json_object(payload, '$.order_id')   AS order_id,
+  get_json_object(payload, '$.amount')     AS amount,
+  json_tuple(payload, 'customer_id', 'amount') AS (customer_id, amount2)
+FROM raw;
+
+-- COMMAND ----------
+
+-- 5. VARIANT (DBR 15.3+) — schema-less JSON storage, query with the `:` operator
+CREATE OR REPLACE TABLE dea_learning.bronze.orders_variant (
+  event_id BIGINT,
+  raw      VARIANT
 );
 
--- COMMAND ----------
-
--- Lightweight extraction without parsing the whole structure
-SELECT event_id,
-       get_json_object(payload, '$.customer.email')   AS email,
-       json_tuple(payload, 'customer', 'items')       AS (customer_str, items_str)
-FROM raw_payloads;
-
--- COMMAND ----------
-
--- VARIANT (DBR 15.3+) — schema-less binary JSON, query with the `:` operator
-CREATE OR REPLACE TABLE main.learn.events_variant (event_id BIGINT, raw VARIANT);
-
-INSERT INTO main.learn.events_variant
-SELECT event_id, parse_json(payload) FROM raw_payloads;
+INSERT INTO dea_learning.bronze.orders_variant
+SELECT order_id,
+       parse_json(to_json(struct(order_id, customer_id, amount, items)))
+FROM   read_files('/Volumes/dea_learning/raw/landing/orders', format => 'json');
 
 SELECT event_id,
-       raw:customer.id::BIGINT      AS customer_id,
-       raw:customer.email::STRING   AS email,
-       raw:items[0].sku::STRING     AS first_sku
-FROM   main.learn.events_variant;
+       raw:order_id::BIGINT       AS order_id,
+       raw:customer_id::BIGINT    AS customer_id,
+       raw:amount::DOUBLE         AS amount,
+       raw:items[0].item_id::STRING AS first_sku
+FROM   dea_learning.bronze.orders_variant
+ORDER BY event_id;

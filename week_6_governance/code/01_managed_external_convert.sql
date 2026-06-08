@@ -1,35 +1,60 @@
 -- Databricks notebook source
 -- MAGIC %md
--- MAGIC # Week 6 · Managed ↔ External table conversion
+-- MAGIC # Week 6 · Managed ↔ External — applied to an `orders_archive` table
+-- MAGIC Showcases the conversion on a realistic scenario: an archive table whose files we want to keep around
+-- MAGIC after the table itself is dropped (external), and later promote into managed status without downtime.
 -- MAGIC Requires DBR 17.0+ or serverless; Delta format.
 
 -- COMMAND ----------
 
-CREATE SCHEMA IF NOT EXISTS main.learn;
-CREATE VOLUME IF NOT EXISTS main.learn.external_data;
-USE main.learn;
+USE CATALOG dea_learning;
+CREATE VOLUME IF NOT EXISTS dea_learning.raw.archive;
 
 -- COMMAND ----------
 
--- Start with an EXTERNAL Delta table
-CREATE OR REPLACE TABLE orders_ext (id INT, amount DOUBLE)
+-- 1. Start with an EXTERNAL Delta table pointing at the archive volume
+CREATE OR REPLACE TABLE silver.orders_archive (
+  order_id   BIGINT,
+  customer_id BIGINT,
+  amount     DOUBLE,
+  order_ts   TIMESTAMP
+)
 USING DELTA
-LOCATION '/Volumes/main/learn/external_data/orders';
+LOCATION '/Volumes/dea_learning/raw/archive/orders';
 
-INSERT INTO orders_ext VALUES (1, 9.99), (2, 19.99);
+INSERT INTO silver.orders_archive
+SELECT order_id, customer_id, amount, order_ts
+FROM   bronze.orders_bronze;
 
-DESCRIBE EXTENDED orders_ext;     -- Type = EXTERNAL
-
--- COMMAND ----------
-
--- Convert to MANAGED (no downtime; keeps history, name, perms, views)
-ALTER TABLE orders_ext SET MANAGED;
-
-DESCRIBE EXTENDED orders_ext;     -- Type = MANAGED
+DESCRIBE EXTENDED silver.orders_archive;     -- Type = EXTERNAL
 
 -- COMMAND ----------
 
--- Rollback: convert back to EXTERNAL at a new location
-ALTER TABLE orders_ext UNSET MANAGED LOCATION '/Volumes/main/learn/external_data/orders_back';
+-- 2. Promote to MANAGED (no downtime; keeps history, name, perms, views)
+ALTER TABLE silver.orders_archive SET MANAGED;
 
-DESCRIBE EXTENDED orders_ext;     -- Type = EXTERNAL again
+DESCRIBE EXTENDED silver.orders_archive;     -- Type = MANAGED
+
+-- COMMAND ----------
+
+-- 3. Roll back to EXTERNAL at a different location
+ALTER TABLE silver.orders_archive UNSET MANAGED
+  LOCATION '/Volumes/dea_learning/raw/archive/orders_back';
+
+DESCRIBE EXTENDED silver.orders_archive;     -- Type = EXTERNAL again
+
+-- COMMAND ----------
+
+-- 4. Files behind the EXTERNAL table survive a DROP
+DROP TABLE silver.orders_archive;
+-- MAGIC %python
+-- MAGIC display(dbutils.fs.ls("/Volumes/dea_learning/raw/archive/orders_back"))
+
+-- COMMAND ----------
+
+-- 5. Re-attach without re-writing data
+CREATE TABLE silver.orders_archive
+USING DELTA
+LOCATION '/Volumes/dea_learning/raw/archive/orders_back';
+
+SELECT count(*) AS recovered_rows FROM silver.orders_archive;

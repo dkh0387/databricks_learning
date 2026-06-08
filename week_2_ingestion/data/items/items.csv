@@ -1,0 +1,16 @@
+item_id,name,category,price,in_stock
+SKU-A001,Wireless Mouse,electronics,29.99,true
+SKU-A002,Bluetooth Keyboard,electronics,79.99,true
+SKU-A003,USB-C Hub,electronics,49.99,true
+SKU-A004,Noise-Cancelling Headphones,electronics,199.99,true
+SKU-A005,4K Monitor,electronics,349.99,false
+SKU-B001,Office Chair,furniture,249.99,true
+SKU-B002,Standing Desk,furniture,499.99,true
+SKU-B003,Desk Lamp,furniture,39.99,true
+SKU-C001,Espresso Beans 1kg,grocery,24.99,true
+SKU-C002,Green Tea Box,grocery,12.99,true
+SKU-C003,Dark Chocolate Bar,grocery,4.99,true
+SKU-D001,Cotton T-Shirt,apparel,19.99,true
+SKU-D002,Running Shoes,apparel,89.99,true
+SKU-D003,Winter Jacket,apparel,159.99,false
+SKU-E001,Yoga Mat,sports,34.99,true

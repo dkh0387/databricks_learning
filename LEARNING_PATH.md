@@ -88,6 +88,13 @@ Self-paced (Databricks Academy — free with account):
 5. Data Interoperability with Unity Catalog
 6. Get Started with Data Governance on Databricks
 
+## Worked data project
+
+A single e-commerce domain (`customers` × `orders` × `items`) threads through every week and culminates in a full medallion pipeline in Week 4. All code samples use the `dea_learning` catalog with `bronze` / `silver` / `gold` / `sec` schemas.
+
+- `DATA_MODEL.md` — domain schema, source files, week-by-week thread.
+- `PIPELINE.md` — end-to-end medallion pipeline with diagrams, expectations, orchestration, governance overlay, and run-it-yourself instructions.
+
 ## Repo coverage vs. exam — week → folder map
 
 | Exam section | Week folder | Notes |

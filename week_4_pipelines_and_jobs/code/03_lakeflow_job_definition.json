@@ -1,43 +1,71 @@
 {
-  "_comment": "Week 4 · Lakeflow Job definition. Import via 'Workflows → Create Job → JSON view → Paste'. Replace cluster_id, notebook_path, and pipeline_id with values from your workspace.",
-  "name": "orders_daily_etl",
+  "_comment": "Week 4 · Lakeflow Job that orchestrates the medallion pipeline. Import via 'Workflows -> Create Job -> JSON view -> Paste'. Replace pipeline_id and warehouse_id with your workspace values.",
+  "name": "dea_learning_orders_etl",
   "tasks": [
     {
-      "task_key": "ingest",
-      "description": "Auto Loader incremental batch into bronze",
+      "task_key": "ingest_setup",
+      "description": "Make sure the raw landing volume has the latest files",
       "notebook_task": {
-        "notebook_path": "/Repos/your-user/databricks_learning/week_2_ingestion/code/02_autoloader_incremental_batch",
+        "notebook_path": "/Workspace/Repos/your-user/databricks_learning/week_2_ingestion/code/00_setup_catalog_and_seed",
         "source": "WORKSPACE"
       },
       "job_cluster_key": "main"
     },
     {
-      "task_key": "transform",
-      "description": "Bronze → silver → gold via declarative pipeline",
-      "depends_on": [{"task_key": "ingest"}],
+      "task_key": "medallion_pipeline",
+      "description": "Bronze -> silver -> gold via the declarative pipeline",
+      "depends_on": [{"task_key": "ingest_setup"}],
       "pipeline_task": {
         "pipeline_id": "REPLACE_WITH_PIPELINE_ID"
       }
     },
     {
-      "task_key": "branch_check",
-      "description": "If/Else: only run quality_audit on weekdays",
-      "depends_on": [{"task_key": "transform"}],
+      "task_key": "cdc_pipeline",
+      "description": "Apply CDC into customers_scd1 / customers_scd2",
+      "depends_on": [{"task_key": "ingest_setup"}],
+      "pipeline_task": {
+        "pipeline_id": "REPLACE_WITH_CDC_PIPELINE_ID"
+      }
+    },
+    {
+      "task_key": "weekday_audit",
+      "description": "Only run a SQL audit on weekdays",
+      "depends_on": [{"task_key": "medallion_pipeline"}],
       "condition_task": {
         "op": "LESS_THAN",
-        "left":  "{{job.trigger.day_of_week}}",
+        "left": "{{job.trigger.day_of_week}}",
         "right": "6"
       }
     },
     {
       "task_key": "quality_audit",
-      "description": "SQL audit over silver",
-      "depends_on": [{"task_key": "branch_check", "outcome": "true"}],
+      "description": "SQL audit over gold tables",
+      "depends_on": [{"task_key": "weekday_audit", "outcome": "true"}],
       "run_if": "ALL_SUCCESS",
       "sql_task": {
         "warehouse_id": "REPLACE_WITH_SQL_WAREHOUSE_ID",
         "query": {
           "query_id": "REPLACE_WITH_SAVED_QUERY_ID"
+        }
+      }
+    },
+    {
+      "task_key": "for_each_region",
+      "description": "Run a downstream notebook per region",
+      "depends_on": [{"task_key": "medallion_pipeline"}],
+      "for_each_task": {
+        "inputs": "[\"EU\",\"NA\",\"APAC\",\"LATAM\",\"EMEA\"]",
+        "concurrency": 3,
+        "task": {
+          "task_key": "region_report",
+          "notebook_task": {
+            "notebook_path": "/Workspace/Repos/your-user/databricks_learning/week_4_pipelines_and_jobs/code/05_region_report",
+            "source": "WORKSPACE",
+            "base_parameters": {
+              "region": "{{input}}"
+            }
+          },
+          "job_cluster_key": "main"
         }
       }
     }

@@ -3,7 +3,10 @@
 Study materials and demos for the **Databricks Certified Data Engineer Associate** exam (May 2026 version).
 
 - Start with `LEARNING_PATH.md` for the full 6-week study plan.
-- Content lives under `week_1_platform/` → `week_6_governance/`. Each folder has `learn*.md` (theory), `glossary.md` (key terms), and `code/` (runnable Databricks notebooks / SQL / Python).
+- See `DATA_MODEL.md` for the unified `customers × orders × items` example that threads through every week.
+- See `PIPELINE.md` for the end-to-end medallion pipeline diagram, orchestration, expectations, and run instructions.
+- Content lives under `week_1_platform/` → `week_6_governance/`. Each folder has `learn*.md` (theory), `glossary.md` (key terms), `code/` (runnable Databricks notebooks / SQL / Python), and where relevant `data/` (source files).
+- All code samples use the `dea_learning` catalog. Run `week_2_ingestion/code/00_setup_catalog_and_seed.py` once to create the catalog/schemas/volume and upload the source files.
 - The full Udemy course materials are kept separate under `udemy_databricks_certified_data_engineer_associate/`.
 - This README documents the local **SQL Server CDC demo** used in `week_2_ingestion/learn_lakeflow_connect.md`.
 

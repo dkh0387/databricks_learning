@@ -1,96 +1,82 @@
 -- Databricks notebook source
 -- MAGIC %md
--- MAGIC # Week 3 · Every join type
--- MAGIC One file you can rip through to internalise the join syntax the exam tests.
+-- MAGIC # Week 3 · Every join type — drilled on orders × customers × items
+-- MAGIC Use the silver tables from `01_silver_cleansing.py` and the bronze items table from Week 2.
 
 -- COMMAND ----------
 
-CREATE OR REPLACE TEMP VIEW orders AS
-SELECT * FROM VALUES
-  (1, 'EU', 100),
-  (2, 'US', 200),
-  (3, 'EU', 300),
-  (4, 'JP', 400)
-AS t(order_id, region, customer_id);
+USE CATALOG dea_learning;
 
-CREATE OR REPLACE TEMP VIEW customers AS
-SELECT * FROM VALUES
-  (100, 'Anna',   'EU'),
-  (200, 'Bob',    'US'),
-  (500, 'Carlos', 'EU')      -- not in orders
-AS t(customer_id, name, region);
-
--- COMMAND ----------
-
--- INNER
-SELECT 'inner' AS kind, o.order_id, c.name
-FROM   orders o JOIN customers c USING (customer_id);
+-- Quick aliases for the drill
+CREATE OR REPLACE TEMP VIEW c AS SELECT * FROM dea_learning.silver.customers_silver;
+CREATE OR REPLACE TEMP VIEW i AS SELECT * FROM dea_learning.bronze.items_bronze;
+-- Flat order_items projection (one row per line item)
+CREATE OR REPLACE TEMP VIEW oi AS
+SELECT
+  order_id, customer_id,
+  item.item_id, item.quantity, item.unit_price,
+  amount AS order_amount, currency
+FROM dea_learning.bronze.orders_bronze
+LATERAL VIEW explode(items) AS item;
 
 -- COMMAND ----------
 
--- LEFT (keep all orders)
-SELECT 'left' AS kind, o.order_id, c.name
-FROM   orders o LEFT JOIN customers c USING (customer_id);
+-- INNER — every line item with its catalog metadata
+SELECT 'inner' AS kind, oi.order_id, oi.item_id, i.name, i.category
+FROM   oi JOIN i USING (item_id);
 
 -- COMMAND ----------
 
--- RIGHT (keep all customers)
-SELECT 'right' AS kind, o.order_id, c.name
-FROM   orders o RIGHT JOIN customers c USING (customer_id);
+-- LEFT — keep every line item even when the catalog row is missing
+SELECT 'left' AS kind, oi.order_id, oi.item_id, i.name
+FROM   oi LEFT JOIN i USING (item_id);
 
 -- COMMAND ----------
 
--- FULL OUTER
-SELECT 'full' AS kind, o.order_id, c.name
-FROM   orders o FULL OUTER JOIN customers c USING (customer_id);
+-- LEFT SEMI — orders that bought at least one catalog item ("which orders matched?")
+SELECT DISTINCT order_id
+FROM   oi
+LEFT SEMI JOIN i USING (item_id);
 
 -- COMMAND ----------
 
--- LEFT SEMI — "does the customer exist?" (no customer cols in output)
-SELECT 'semi' AS kind, *
-FROM   orders o LEFT SEMI JOIN customers c USING (customer_id);
+-- LEFT ANTI — line items whose SKU is NOT in the catalog (data-quality red flag)
+SELECT *
+FROM   oi
+LEFT ANTI JOIN i USING (item_id);
 
 -- COMMAND ----------
 
--- LEFT ANTI — "which orders have no matching customer?"
-SELECT 'anti' AS kind, *
-FROM   orders o LEFT ANTI JOIN customers c USING (customer_id);
+-- FULL OUTER — find catalog items never ordered AND orders for unknown items
+SELECT i.item_id AS catalog_sku, oi.item_id AS order_sku, i.name
+FROM   i FULL OUTER JOIN oi USING (item_id);
 
 -- COMMAND ----------
 
--- CROSS — cartesian
-SELECT 'cross' AS kind, o.order_id, c.name
-FROM   orders o CROSS JOIN customers c
-LIMIT 20;
+-- BROADCAST hint — items is small enough to broadcast for free
+SELECT /*+ BROADCAST(i) */ oi.order_id, oi.item_id, i.category, oi.quantity * oi.unit_price AS line_total
+FROM   oi JOIN i USING (item_id);
 
 -- COMMAND ----------
 
--- BROADCAST hint — force a small-side broadcast
-SELECT /*+ BROADCAST(c) */ o.order_id, c.name
-FROM   orders o JOIN customers c USING (customer_id);
+-- MULTI-key join — customers × orders flattened to one row per (customer, order)
+SELECT c.customer_id, c.name, c.region, o.order_id, o.amount, o.currency
+FROM   c
+JOIN   dea_learning.bronze.orders_bronze o ON c.customer_id = o.customer_id
+ORDER BY c.customer_id, o.order_id;
 
 -- COMMAND ----------
 
--- MULTI-key join
-CREATE OR REPLACE TEMP VIEW prices AS
-SELECT * FROM VALUES
-  ('EU', 'A', 1.10),
-  ('EU', 'B', 1.20),
-  ('US', 'A', 1.00)
-AS t(region, sku, price);
+-- UNION vs UNION ALL — combine line items from two days, dedup vs keep all
+SELECT * FROM oi WHERE order_id IN (1001, 1002) UNION
+SELECT * FROM oi WHERE order_id IN (1002, 1003);
 
-CREATE OR REPLACE TEMP VIEW sales AS
-SELECT * FROM VALUES
-  ('EU', 'A', 5),
-  ('EU', 'B', 3),
-  ('US', 'A', 7)
-AS t(region, sku, qty);
+SELECT count(*) AS rows_dedup FROM (
+  SELECT * FROM oi WHERE order_id IN (1001, 1002) UNION
+  SELECT * FROM oi WHERE order_id IN (1002, 1003)
+);
 
-SELECT s.region, s.sku, s.qty, p.price, s.qty * p.price AS revenue
-FROM   sales s JOIN prices p ON s.region = p.region AND s.sku = p.sku;
-
--- COMMAND ----------
-
--- UNION vs UNION ALL
-SELECT 1 AS x UNION     SELECT 1 AS x UNION     SELECT 2 AS x;   -- 2 rows
-SELECT 1 AS x UNION ALL SELECT 1 AS x UNION ALL SELECT 2 AS x;   -- 3 rows
+SELECT count(*) AS rows_all FROM (
+  SELECT * FROM oi WHERE order_id IN (1001, 1002) UNION ALL
+  SELECT * FROM oi WHERE order_id IN (1002, 1003)
+);

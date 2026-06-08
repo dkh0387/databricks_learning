@@ -1,63 +1,62 @@
 -- Databricks notebook source
 -- MAGIC %md
--- MAGIC # Week 3 · Gold-layer object choices
--- MAGIC Table vs View vs Materialized View vs Streaming Table — when each is right.
+-- MAGIC # Week 3 · Gold-layer object choices on the orders/customers domain
+-- MAGIC Same business question (daily revenue per region), four different objects, four different tradeoffs.
 
 -- COMMAND ----------
 
-CREATE SCHEMA IF NOT EXISTS main.learn;
-
--- Reuse the silver table from `01_silver_cleansing.py`. If you haven't run it, mock one:
-CREATE OR REPLACE TABLE main.learn.orders_silver (
-  order_id BIGINT, customer_id BIGINT, region STRING, amount DOUBLE, order_date DATE
-) USING DELTA;
-
-INSERT INTO main.learn.orders_silver VALUES
-  (1, 100, 'EU', 9.99,  DATE'2026-06-01'),
-  (2, 101, 'US', 19.99, DATE'2026-06-01'),
-  (3, 100, 'EU', 4.99,  DATE'2026-06-02'),
-  (4, 102, 'EU', 29.99, DATE'2026-06-02');
+USE CATALOG dea_learning;
 
 -- COMMAND ----------
 
 -- MAGIC %md
 -- MAGIC ### 1. Regular Delta TABLE
--- MAGIC Use when: you need custom MERGE/UPDATE/DELETE logic; downstream consumers want a normal table.
+-- MAGIC Use when: you need custom MERGE/UPDATE/DELETE logic; downstream wants a normal table.
 
 -- COMMAND ----------
 
-CREATE OR REPLACE TABLE main.learn.daily_revenue_table AS
-SELECT order_date, region, sum(amount) AS revenue
-FROM   main.learn.orders_silver
-GROUP BY order_date, region;
+CREATE OR REPLACE TABLE gold.daily_revenue_table AS
+SELECT to_date(o.order_ts) AS order_date,
+       c.region,
+       sum(o.amount)       AS revenue,
+       count(*)            AS orders
+FROM   bronze.orders_bronze o
+JOIN   silver.customers_silver c USING (customer_id)
+GROUP BY to_date(o.order_ts), c.region;
+
+SELECT * FROM gold.daily_revenue_table ORDER BY order_date, region;
 
 -- COMMAND ----------
 
 -- MAGIC %md
 -- MAGIC ### 2. VIEW
--- MAGIC Use when: lightweight projection/filter/security boundary; data changes constantly and you don't want storage.
+-- MAGIC Use when: lightweight projection / filter / security boundary; data changes frequently.
 
 -- COMMAND ----------
 
-CREATE OR REPLACE VIEW main.learn.eu_orders AS
-SELECT * FROM main.learn.orders_silver WHERE region = 'EU';
+CREATE OR REPLACE VIEW gold.eu_orders AS
+SELECT o.*
+FROM   bronze.orders_bronze o
+JOIN   silver.customers_silver c USING (customer_id)
+WHERE  c.region = 'EU';
 
-SELECT * FROM main.learn.eu_orders;
+SELECT count(*) FROM gold.eu_orders;
 
 -- COMMAND ----------
 
 -- MAGIC %md
 -- MAGIC ### 3. MATERIALIZED VIEW (inside a Spark Declarative Pipeline)
--- MAGIC Use when: expensive aggregation; consumers can tolerate minutes of staleness; want pipeline-managed refresh.
--- MAGIC NOTE: incremental refresh requires serverless. Cannot be a streaming source.
+-- MAGIC Use when: expensive aggregation; consumers tolerate minutes of staleness; pipeline-managed refresh.
+-- MAGIC NOTE: incremental refresh requires serverless. CANNOT be a streaming source.
 
 -- COMMAND ----------
 
--- Put this statement inside a pipeline notebook; do not run it standalone.
--- CREATE OR REFRESH MATERIALIZED VIEW main.learn.daily_revenue_mv AS
--- SELECT order_date, region, sum(amount) AS revenue
--- FROM   main.learn.orders_silver
--- GROUP BY order_date, region;
+-- Place this statement inside a pipeline notebook (week_4/code/01_pipeline_bronze_silver.sql shows the full pipeline).
+-- CREATE OR REFRESH MATERIALIZED VIEW gold.daily_revenue_mv AS
+-- SELECT to_date(o.order_ts) AS order_date, c.region, sum(o.amount) AS revenue
+-- FROM   bronze.orders_bronze o
+-- JOIN   silver.customers_silver c USING (customer_id)
+-- GROUP BY to_date(o.order_ts), c.region;
 
 -- COMMAND ----------
 
@@ -68,16 +67,5 @@ SELECT * FROM main.learn.eu_orders;
 -- COMMAND ----------
 
 -- Inside a pipeline notebook only:
--- CREATE OR REFRESH STREAMING TABLE main.learn.orders_stream
--- AS SELECT * FROM STREAM read_files('/Volumes/main/learn/landing/orders', format => 'json');
-
--- COMMAND ----------
-
--- MAGIC %md
--- MAGIC ### Decision summary
--- MAGIC | Need | Pick |
--- MAGIC | --- | --- |
--- MAGIC | Custom MERGE/UPDATE/DELETE | TABLE |
--- MAGIC | Continuous arrival, exactly-once | STREAMING TABLE |
--- MAGIC | Expensive aggregation, tolerate staleness | MATERIALIZED VIEW |
--- MAGIC | Cheap projection / security view | VIEW |
+-- CREATE OR REFRESH STREAMING TABLE bronze.orders_bronze
+-- AS SELECT * FROM STREAM read_files('/Volumes/dea_learning/raw/landing/orders', format => 'json');

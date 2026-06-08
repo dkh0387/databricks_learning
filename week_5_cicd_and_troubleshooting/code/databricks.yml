@@ -1,18 +1,18 @@
-# Week 5 · Reference Declarative Automation Bundle.
-# Copy this file to a fresh repo root, run `databricks bundle init` for a fuller template,
-# or `databricks bundle validate` against this skeleton.
+# Week 5 · Declarative Automation Bundle for the medallion pipeline.
+# Deploys the Week 4 declarative pipeline + the orchestrating Lakeflow Job across dev / staging / prod targets.
+# Copy to a repo root, run `databricks bundle validate -t dev` then `databricks bundle deploy -t dev`.
 
 bundle:
-  name: orders_pipeline
+  name: dea_learning_orders
   databricks_cli_version: ">=0.230.0"
-
-include:
-  - resources/*.yml          # optional: split resources into separate files
 
 variables:
   catalog:
     description: "Target Unity Catalog"
-    default: dev_catalog
+    default: dea_learning_dev
+  landing_volume_path:
+    description: "Volume root for raw landing"
+    default: "/Volumes/dea_learning_dev/raw/landing"
   notification_email:
     description: "Failure email"
     default: team@example.com
@@ -27,36 +27,40 @@ sync:
     - "tests/**"
 
 resources:
+  pipelines:
+    medallion_orders:
+      name: "medallion_orders_${bundle.target}"
+      catalog: ${var.catalog}
+      target: bronze    # default target schema; tables use their own where set
+      libraries:
+        - notebook:
+            path: ./src/pipeline_bronze_silver_gold.sql
+        - notebook:
+            path: ./src/pipeline_auto_cdc_scd2.sql
+      configuration:
+        landing_path: ${var.landing_volume_path}
+
   jobs:
     orders_etl:
       name: "orders_etl_${bundle.target}"
       email_notifications:
         on_failure: ["${var.notification_email}"]
       tasks:
-        - task_key: ingest
+        - task_key: ingest_setup
           notebook_task:
-            notebook_path: ./src/ingest.py
+            notebook_path: ./src/setup_catalog_and_seed.py
           job_cluster_key: main
-        - task_key: transform
+        - task_key: medallion
           depends_on:
-            - task_key: ingest
+            - task_key: ingest_setup
           pipeline_task:
-            pipeline_id: ${resources.pipelines.orders_silver.id}
+            pipeline_id: ${resources.pipelines.medallion_orders.id}
       job_clusters:
         - job_cluster_key: main
           new_cluster:
             spark_version: "15.4.x-scala2.12"
             node_type_id: ${var.cluster_node_type}
             num_workers: 2
-
-  pipelines:
-    orders_silver:
-      name: "orders_silver_${bundle.target}"
-      catalog: ${var.catalog}
-      target: silver
-      libraries:
-        - notebook:
-            path: ./src/transform.sql
 
 targets:
   dev:
@@ -65,13 +69,15 @@ targets:
     workspace:
       host: https://dev.cloud.databricks.com
     variables:
-      catalog: dev_catalog
+      catalog: dea_learning_dev
+      landing_volume_path: "/Volumes/dea_learning_dev/raw/landing"
 
   staging:
     workspace:
       host: https://staging.cloud.databricks.com
     variables:
-      catalog: staging_catalog
+      catalog: dea_learning_staging
+      landing_volume_path: "/Volumes/dea_learning_staging/raw/landing"
       cluster_node_type: i3.2xlarge
 
   prod:
@@ -81,7 +87,8 @@ targets:
     run_as:
       service_principal_name: "prod-deployer-sp"
     variables:
-      catalog: prod_catalog
+      catalog: dea_learning
+      landing_volume_path: "/Volumes/dea_learning/raw/landing"
       cluster_node_type: i3.4xlarge
       notification_email: oncall@example.com
     permissions:

@@ -1,64 +1,88 @@
 -- Databricks notebook source
 -- MAGIC %md
--- MAGIC # Week 3 · Aggregations and Window functions
--- MAGIC The exam asks specifically about `approx_count_distinct` vs `count(DISTINCT)` and about window patterns.
+-- MAGIC # Week 3 · Aggregations and Window functions on the orders/customers/items domain
+-- MAGIC Builds the queries that feed Week 4's gold layer.
 
 -- COMMAND ----------
 
-CREATE OR REPLACE TEMP VIEW orders AS
-SELECT * FROM VALUES
-  (1, 100, 'EU', 9.99,  TIMESTAMP'2026-06-01 10:00:00'),
-  (2, 100, 'EU', 19.99, TIMESTAMP'2026-06-01 11:00:00'),
-  (3, 101, 'US', 4.99,  TIMESTAMP'2026-06-01 12:00:00'),
-  (4, 100, 'EU', 29.99, TIMESTAMP'2026-06-02 10:00:00'),
-  (5, 102, 'EU', 4.99,  TIMESTAMP'2026-06-02 11:00:00')
-AS t(order_id, customer_id, region, amount, order_ts);
+USE CATALOG dea_learning;
 
 -- COMMAND ----------
 
--- Basic aggregations
-SELECT region,
-       count(*)                       AS rows,
-       count(DISTINCT customer_id)    AS uniq_exact,
-       approx_count_distinct(customer_id, 0.05) AS uniq_approx,
-       sum(amount)                    AS revenue,
-       avg(amount)                    AS aov
-FROM   orders
-GROUP BY region;
-
--- COMMAND ----------
-
--- summary() / describe() equivalents
-SELECT min(amount), max(amount), mean(amount), stddev(amount) FROM orders;
-
--- COMMAND ----------
-
--- Window: running totals + previous value per customer
+-- Flat line items
+CREATE OR REPLACE TEMP VIEW order_items AS
 SELECT
-  order_id, customer_id, order_ts, amount,
-  sum(amount) OVER w_run AS running_total,
-  lag(amount) OVER w_run AS prev_amount,
-  row_number() OVER w_run AS order_seq
-FROM orders
-WINDOW w_run AS (PARTITION BY customer_id ORDER BY order_ts);
+  o.order_id, o.customer_id, o.order_ts, o.status, o.currency, o.amount AS order_amount,
+  item.item_id, item.quantity, item.unit_price,
+  item.quantity * item.unit_price AS line_total,
+  to_date(o.order_ts) AS order_date
+FROM   bronze.orders_bronze o
+LATERAL VIEW explode(o.items) AS item;
 
 -- COMMAND ----------
 
--- Window: rank orders by amount inside each region
+-- 1. Per-region revenue with exact vs approximate distinct customers
+SELECT c.region,
+       count(*)                                     AS line_items,
+       count(DISTINCT oi.order_id)                  AS orders_exact,
+       count(DISTINCT oi.customer_id)               AS customers_exact,
+       approx_count_distinct(oi.customer_id, 0.05)  AS customers_approx,
+       sum(oi.line_total)                           AS revenue,
+       avg(oi.line_total)                           AS avg_line
+FROM   order_items oi
+JOIN   silver.customers_silver c USING (customer_id)
+GROUP BY c.region
+ORDER BY revenue DESC;
+
+-- COMMAND ----------
+
+-- 2. Top items by revenue
+SELECT i.item_id, i.name, i.category,
+       sum(oi.quantity)   AS units_sold,
+       sum(oi.line_total) AS revenue
+FROM   order_items oi
+JOIN   bronze.items_bronze i USING (item_id)
+GROUP BY i.item_id, i.name, i.category
+ORDER BY revenue DESC
+LIMIT 10;
+
+-- COMMAND ----------
+
+-- 3. Running total per customer (window)
 SELECT
-  order_id, region, amount,
-  rank()       OVER (PARTITION BY region ORDER BY amount DESC) AS rnk,
-  dense_rank() OVER (PARTITION BY region ORDER BY amount DESC) AS dense_rnk,
-  percent_rank() OVER (PARTITION BY region ORDER BY amount DESC) AS pct
-FROM orders;
+  customer_id, order_id, order_ts, order_amount,
+  sum(order_amount) OVER w AS running_spend,
+  row_number()      OVER w AS order_seq,
+  lag(order_amount) OVER w AS prev_order_amount
+FROM (
+  SELECT DISTINCT order_id, customer_id, order_ts, order_amount FROM order_items
+)
+WINDOW w AS (PARTITION BY customer_id ORDER BY order_ts)
+ORDER BY customer_id, order_ts;
 
 -- COMMAND ----------
 
--- Pivot
+-- 4. Rank orders within each region
+SELECT customer_id, region, order_id, order_amount,
+       rank()       OVER (PARTITION BY region ORDER BY order_amount DESC) AS rnk,
+       dense_rank() OVER (PARTITION BY region ORDER BY order_amount DESC) AS dense_rnk,
+       percent_rank() OVER (PARTITION BY region ORDER BY order_amount DESC) AS pct
+FROM (
+  SELECT DISTINCT oi.order_id, oi.customer_id, oi.order_amount, c.region
+  FROM   order_items oi
+  JOIN   silver.customers_silver c USING (customer_id)
+);
+
+-- COMMAND ----------
+
+-- 5. Pivot — daily revenue by region
 SELECT *
 FROM (
-  SELECT region, customer_id, amount FROM orders
+  SELECT to_date(o.order_ts) AS d, c.region, o.amount
+  FROM   bronze.orders_bronze o
+  JOIN   silver.customers_silver c USING (customer_id)
 )
 PIVOT (
-  sum(amount) FOR region IN ('EU' AS revenue_eu, 'US' AS revenue_us)
-);
+  sum(amount) FOR region IN ('EU' AS revenue_eu, 'NA' AS revenue_na, 'APAC' AS revenue_apac)
+)
+ORDER BY d;

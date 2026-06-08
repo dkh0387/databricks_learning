@@ -1,69 +1,71 @@
 -- Databricks notebook source
 -- MAGIC %md
--- MAGIC # Week 5 · Liquid Clustering + Predictive Optimization
--- MAGIC Hands-on with the optimization features the exam asks about.
+-- MAGIC # Week 5 · Liquid Clustering + Predictive Optimization on `silver_orders`
+-- MAGIC Apply the optimization features to a real table from our medallion pipeline.
 
 -- COMMAND ----------
 
-CREATE SCHEMA IF NOT EXISTS main.learn;
-USE main.learn;
+USE CATALOG dea_learning;
 
--- 1. Create a Liquid-clustered table with explicit keys
-CREATE OR REPLACE TABLE events_lc (
-  id         BIGINT,
-  user_id    BIGINT,
-  event_type STRING,
-  event_ts   TIMESTAMP,
-  payload    STRING
+-- 1. Re-create silver_orders with Liquid Clustering keys
+CREATE OR REPLACE TABLE silver.silver_orders_lc (
+  order_id        BIGINT,
+  customer_id     BIGINT,
+  order_ts        TIMESTAMP,
+  order_date      DATE,
+  status          STRING,
+  currency        STRING,
+  amount          DOUBLE,
+  discount_amount DOUBLE
 )
 USING DELTA
-CLUSTER BY (user_id, event_ts);
+CLUSTER BY (customer_id, order_date);
 
 -- COMMAND ----------
 
--- Bulk-load some data
-INSERT INTO events_lc
+-- Bulk-load 200k synthetic orders from existing silver
+INSERT INTO silver.silver_orders_lc
 SELECT
-  id,
-  (id % 1000) AS user_id,
-  CASE WHEN id % 3 = 0 THEN 'click' WHEN id % 3 = 1 THEN 'view' ELSE 'purchase' END AS event_type,
-  timestampadd(SECOND, id, TIMESTAMP'2026-06-01 00:00:00'),
-  repeat('x', 100)
-FROM range(0, 100000);
+  id AS order_id,
+  (id % 20) + 1 AS customer_id,
+  timestampadd(SECOND, id, TIMESTAMP'2026-06-01 00:00:00') AS order_ts,
+  date_add(DATE'2026-06-01', cast(id / 5000 AS INT)) AS order_date,
+  CASE WHEN id % 4 = 0 THEN 'cancelled' ELSE 'placed' END AS status,
+  CASE WHEN id % 3 = 0 THEN 'USD' ELSE 'EUR' END AS currency,
+  rand() * 200 AS amount,
+  0.0 AS discount_amount
+FROM range(0, 200000);
 
 -- 2. Inspect clustering metadata
-DESCRIBE DETAIL events_lc;     -- look for clusteringColumns
+DESCRIBE DETAIL silver.silver_orders_lc;   -- look for clusteringColumns
 
 -- COMMAND ----------
 
--- 3. Incremental clustering work (touches new/changed files only)
-OPTIMIZE events_lc;
+-- 3. Incremental clustering work (new/changed files only)
+OPTIMIZE silver.silver_orders_lc;
 
--- 4. Switch keys — must do a FULL OPTIMIZE to materialize the new layout
-ALTER TABLE events_lc CLUSTER BY (event_type, event_ts);
-OPTIMIZE events_lc FULL;
+-- 4. Switch keys — full rewrite required after a key change
+ALTER TABLE silver.silver_orders_lc CLUSTER BY (status, order_date);
+OPTIMIZE silver.silver_orders_lc FULL;
 
-DESCRIBE DETAIL events_lc;
-
--- COMMAND ----------
-
--- 5. Let Predictive Optimization pick keys (UC managed + DBR 15.4 LTS+ + serverless)
-ALTER TABLE events_lc CLUSTER BY AUTO;
-
--- Disable clustering entirely
--- ALTER TABLE events_lc CLUSTER BY NONE;
+DESCRIBE DETAIL silver.silver_orders_lc;
 
 -- COMMAND ----------
 
--- 6. Predictive Optimization — runs OPTIMIZE / VACUUM / ANALYZE automatically on UC managed Delta.
--- Inheritance: account → catalog → schema → table.
-ALTER CATALOG main         ENABLE PREDICTIVE OPTIMIZATION;
-ALTER SCHEMA  main.learn   INHERIT PREDICTIVE OPTIMIZATION;     -- inherit from catalog
+-- 5. Let Predictive Optimization pick keys (UC managed + DBR 15.4 LTS+)
+ALTER TABLE silver.silver_orders_lc CLUSTER BY AUTO;
 
-DESCRIBE EXTENDED events_lc;   -- look for "Predictive Optimization" line
+-- Or disable clustering
+-- ALTER TABLE silver.silver_orders_lc CLUSTER BY NONE;
 
 -- COMMAND ----------
 
--- 7. Manual VACUUM — remove tombstoned files (default 7 day retention)
-VACUUM events_lc;                       -- safe
--- VACUUM events_lc RETAIN 168 HOURS;   -- explicit
+-- 6. Predictive Optimization at catalog level — applies to all UC managed Delta tables underneath
+ALTER CATALOG dea_learning ENABLE PREDICTIVE OPTIMIZATION;
+
+DESCRIBE EXTENDED silver.silver_orders_lc;   -- look for "Predictive Optimization" line
+
+-- COMMAND ----------
+
+-- 7. VACUUM (default 7-day retention)
+VACUUM silver.silver_orders_lc;

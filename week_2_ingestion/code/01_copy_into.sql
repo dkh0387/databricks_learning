@@ -1,74 +1,75 @@
 -- Databricks notebook source
 -- MAGIC %md
--- MAGIC # Week 2 · COPY INTO
--- MAGIC Idempotent incremental file load into a Delta table.
+-- MAGIC # Week 2 · COPY INTO — load `customers` and `items` to bronze
+-- MAGIC Idempotent incremental load of two seed datasets.
+-- MAGIC Run `00_setup_catalog_and_seed.py` first so the files land in `/Volumes/dea_learning/raw/landing/`.
 
 -- COMMAND ----------
 
-CREATE SCHEMA IF NOT EXISTS main.learn;
-CREATE VOLUME IF NOT EXISTS main.learn.landing;
-
--- COMMAND ----------
-
--- Seed the landing volume with two JSON files
--- MAGIC %python
--- MAGIC import json, time, os
--- MAGIC base = "/Volumes/main/learn/landing/orders"
--- MAGIC dbutils.fs.mkdirs(base)
--- MAGIC dbutils.fs.put(f"{base}/orders_2026-06-01.json",
--- MAGIC   '{"id":1,"amount":9.99,"region":"EU"}\n{"id":2,"amount":19.99,"region":"US"}',
--- MAGIC   overwrite=True)
--- MAGIC dbutils.fs.put(f"{base}/orders_2026-06-02.json",
--- MAGIC   '{"id":3,"amount":4.99,"region":"EU"}',
--- MAGIC   overwrite=True)
-
--- COMMAND ----------
-
--- Empty target table
-CREATE OR REPLACE TABLE main.learn.orders_bronze (
-  id      BIGINT,
-  amount  DOUBLE,
-  region  STRING
+-- 1. CUSTOMERS — CSV → bronze table
+CREATE OR REPLACE TABLE dea_learning.bronze.customers_bronze (
+  customer_id   BIGINT,
+  name          STRING,
+  email         STRING,
+  country       STRING,
+  signup_date   DATE,
+  tier          STRING
 ) USING DELTA;
 
--- COMMAND ----------
+COPY INTO dea_learning.bronze.customers_bronze
+FROM '/Volumes/dea_learning/raw/landing/customers'
+FILEFORMAT = CSV
+FORMAT_OPTIONS ('header' = 'true', 'inferSchema' = 'false', 'delimiter' = ',')
+COPY_OPTIONS  ('mergeSchema' = 'false');
 
--- Load — first run picks up both files
-COPY INTO main.learn.orders_bronze
-FROM '/Volumes/main/learn/landing/orders'
-FILEFORMAT = JSON
-FORMAT_OPTIONS ('inferSchema' = 'true')
-COPY_OPTIONS  ('mergeSchema' = 'true');
-
-SELECT count(*) AS rows FROM main.learn.orders_bronze;
+SELECT count(*) AS rows FROM dea_learning.bronze.customers_bronze;
+SELECT * FROM dea_learning.bronze.customers_bronze ORDER BY customer_id LIMIT 5;
 
 -- COMMAND ----------
 
--- Re-run is a no-op (idempotency)
-COPY INTO main.learn.orders_bronze
-FROM '/Volumes/main/learn/landing/orders'
-FILEFORMAT = JSON;
+-- 2. Idempotency — re-running picks up nothing new
+COPY INTO dea_learning.bronze.customers_bronze
+FROM '/Volumes/dea_learning/raw/landing/customers'
+FILEFORMAT = CSV
+FORMAT_OPTIONS ('header' = 'true');
 
-SELECT count(*) AS rows FROM main.learn.orders_bronze;   -- still the same count
-
--- COMMAND ----------
-
--- Drop a new file and re-run — only that file ingests
--- MAGIC %python
--- MAGIC dbutils.fs.put("/Volumes/main/learn/landing/orders/orders_2026-06-03.json",
--- MAGIC   '{"id":4,"amount":29.99,"region":"DE"}',
--- MAGIC   overwrite=True)
-
-COPY INTO main.learn.orders_bronze
-FROM '/Volumes/main/learn/landing/orders'
-FILEFORMAT = JSON;
-
-SELECT * FROM main.learn.orders_bronze ORDER BY id;
+SELECT count(*) AS rows FROM dea_learning.bronze.customers_bronze;   -- same as before
 
 -- COMMAND ----------
 
--- Force re-process of every file
-COPY INTO main.learn.orders_bronze
-FROM '/Volumes/main/learn/landing/orders'
-FILEFORMAT = JSON
-COPY_OPTIONS ('force' = 'true');
+-- 3. ITEMS — CSV → bronze table
+CREATE OR REPLACE TABLE dea_learning.bronze.items_bronze (
+  item_id    STRING,
+  name       STRING,
+  category   STRING,
+  price      DOUBLE,
+  in_stock   BOOLEAN
+) USING DELTA;
+
+COPY INTO dea_learning.bronze.items_bronze
+FROM '/Volumes/dea_learning/raw/landing/items'
+FILEFORMAT = CSV
+FORMAT_OPTIONS ('header' = 'true');
+
+SELECT * FROM dea_learning.bronze.items_bronze ORDER BY item_id;
+
+-- COMMAND ----------
+
+-- 4. Force re-process every file (`force=true`) — useful for full backfill
+COPY INTO dea_learning.bronze.customers_bronze
+FROM '/Volumes/dea_learning/raw/landing/customers'
+FILEFORMAT = CSV
+FORMAT_OPTIONS ('header' = 'true')
+COPY_OPTIONS  ('force' = 'true');
+
+-- COMMAND ----------
+
+-- 5. One-shot alternative — CREATE TABLE AS read_files()
+-- Equivalent to a single COPY INTO for a known set of files. Not incremental.
+CREATE OR REPLACE TABLE dea_learning.bronze.items_bronze_v2 AS
+SELECT *
+FROM   read_files(
+  '/Volumes/dea_learning/raw/landing/items',
+  format => 'csv',
+  header => true
+);

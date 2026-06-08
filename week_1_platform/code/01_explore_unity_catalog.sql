@@ -12,14 +12,14 @@ SHOW CATALOGS;
 -- COMMAND ----------
 
 -- Pick one and list its schemas
-SHOW SCHEMAS IN main;
+SHOW SCHEMAS IN dea_learning;
 
 -- COMMAND ----------
 
 -- List tables, views, volumes inside a schema
-SHOW TABLES   IN main.default;
-SHOW VIEWS    IN main.default;
-SHOW VOLUMES  IN main.default;
+SHOW TABLES   IN dea_learning.bronze;
+SHOW VIEWS    IN dea_learning.bronze;
+SHOW VOLUMES  IN dea_learning.bronze;
 
 -- COMMAND ----------
 
@@ -33,10 +33,10 @@ SELECT
 -- COMMAND ----------
 
 -- Three-level namespace in action
-USE CATALOG main;
+USE CATALOG dea_learning;
 USE SCHEMA  default;
 
--- This now resolves as main.default.my_table (if it exists)
+-- This now resolves as dea_learning.bronze.my_table (if it exists)
 -- SELECT * FROM my_table LIMIT 10;
 
 -- COMMAND ----------
@@ -44,7 +44,7 @@ USE SCHEMA  default;
 -- Information schema — works in UC
 SELECT table_catalog, table_schema, table_name, table_type, created
 FROM   system.information_schema.tables
-WHERE  table_catalog = 'main'
+WHERE  table_catalog = 'dea_learning'
 ORDER BY created DESC
 LIMIT 20;
 

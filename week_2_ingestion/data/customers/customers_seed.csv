@@ -1,0 +1,21 @@
+customer_id,name,email,country,signup_date,tier
+1,Anna Müller,anna.muller@example.com,DE,2025-01-15,gold
+2,Bob Johnson,bob.johnson@example.com,US,2025-02-20,silver
+3,Carla Silva,carla.silva@example.com,BR,2025-03-10,bronze
+4,Daichi Sato,daichi.sato@example.com,JP,2025-03-22,silver
+5,Elena Rossi,elena.rossi@example.com,IT,2025-04-01,gold
+6,Faisal Khan,faisal.khan@example.com,AE,2025-04-12,bronze
+7,Greta Schmidt,greta.schmidt@example.com,DE,2025-04-18,silver
+8,Henri Dubois,henri.dubois@example.com,FR,2025-04-25,bronze
+9,Isabel Garcia,isabel.garcia@example.com,ES,2025-05-02,silver
+10,Junpei Tanaka,junpei.tanaka@example.com,JP,2025-05-08,bronze
+11,Kara O'Connor,kara.oconnor@example.com,IE,2025-05-15,silver
+12,Liam Murphy,liam.murphy@example.com,IE,2025-05-21,bronze
+13,Maya Patel,maya.patel@example.com,IN,2025-06-01,gold
+14,Noah Williams,noah.williams@example.com,US,2025-06-10,silver
+15,Olivia Brown,olivia.brown@example.com,CA,2025-06-18,bronze
+16,Priya Sharma,priya.sharma@example.com,IN,2025-07-02,silver
+17,Quentin Petit,quentin.petit@example.com,FR,2025-07-15,bronze
+18,Rafael Costa,rafael.costa@example.com,BR,2025-08-01,silver
+19,Sofia Andersson,sofia.andersson@example.com,SE,2025-08-12,gold
+20,Tomas Novak,tomas.novak@example.com,CZ,2025-09-01,bronze
