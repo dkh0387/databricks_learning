@@ -22,7 +22,7 @@
 - **Databricks workspaces:** develop and run
 - **Databricks Git folders:** version control
 - **Unity Catalog:** leverages data for multiple workspaces
-- **Databricks deployment tools:** compile, test , deploy
+- **Databricks deployment tools:** compile, test, deploy
 
 ## Modularizing of PySpark code
 

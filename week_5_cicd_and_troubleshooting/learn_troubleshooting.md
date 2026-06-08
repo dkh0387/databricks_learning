@@ -56,7 +56,7 @@ Enable *publish event log to metastore* in pipeline settings, then:
 
 ```sql
 SELECT timestamp, event_type, message, level, details
-FROM main.observability.pipeline_event_log
+FROM dea_learning.observability.pipeline_event_log   -- the publish target you set in pipeline config
 WHERE level IN ('ERROR', 'WARN')
 ORDER BY timestamp DESC;
 ```
@@ -113,13 +113,13 @@ Any non-zero spill = the executor ran low on memory and paged data to disk. Slow
 
 ### AQE — Adaptive Query Execution
 
-Runtime re-optimization based on observed shuffle stats. Default-on in DBR 7.3+. Key knobs:
+Runtime re-optimization based on observed shuffle stats. Default-on in DBR 7.3+. Key knobs (Python, runtime-settable):
 
 ```python
-spark.sql.adaptive.enabled = true                       # master switch
-spark.sql.adaptive.coalescePartitions.enabled = true    # merge tiny post-shuffle partitions
-spark.sql.adaptive.skewJoin.enabled = true              # split skewed partitions
-spark.sql.adaptive.localShuffleReader.enabled = true    # avoids unnecessary network IO
+spark.conf.set("spark.sql.adaptive.enabled", True)                       # master switch
+spark.conf.set("spark.sql.adaptive.coalescePartitions.enabled", True)    # merge tiny post-shuffle partitions
+spark.conf.set("spark.sql.adaptive.skewJoin.enabled", True)              # split skewed partitions
+spark.conf.set("spark.sql.adaptive.localShuffleReader.enabled", True)    # avoids unnecessary network IO
 ```
 
 ## 3. Cluster diagnosis
@@ -169,8 +169,8 @@ Tip: in the Spark UI → *Executors* tab, look at **Storage Memory** and **On He
 Compacts small files into larger ones (~1 GB target). Run periodically on tables with frequent small writes (streaming sinks, MERGE-heavy tables).
 
 ```sql
-OPTIMIZE main.sales.orders;
-OPTIMIZE main.sales.orders WHERE event_date >= '2026-01-01';   -- partitioned subset
+OPTIMIZE dea_learning.silver.silver_orders;
+OPTIMIZE dea_learning.silver.silver_orders WHERE event_date >= '2026-01-01';   -- partitioned subset
 ```
 
 ### Z-Order (legacy, prefer Liquid Clustering)
@@ -178,7 +178,7 @@ OPTIMIZE main.sales.orders WHERE event_date >= '2026-01-01';   -- partitioned su
 Co-locates rows with similar values on disk. Useful for high-cardinality filter columns.
 
 ```sql
-OPTIMIZE main.sales.orders ZORDER BY (customer_id);
+OPTIMIZE dea_learning.silver.silver_orders ZORDER BY (customer_id);
 ```
 
 Drawbacks: not incremental (full rewrite each run), partitioning must be planned upfront.
@@ -189,26 +189,26 @@ Replaces partitioning + Z-Order. Incremental, predictive-optimization aware, let
 
 ```sql
 -- Define keys explicitly
-CREATE TABLE main.sales.orders (id BIGINT, customer_id BIGINT, ts TIMESTAMP)
+CREATE TABLE dea_learning.silver.silver_orders (id BIGINT, customer_id BIGINT, ts TIMESTAMP)
 CLUSTER BY (customer_id, ts);
 
 -- Or let Databricks pick keys based on query workload
-CREATE TABLE main.sales.orders (id BIGINT, customer_id BIGINT, ts TIMESTAMP)
+CREATE TABLE dea_learning.silver.silver_orders (id BIGINT, customer_id BIGINT, ts TIMESTAMP)
 CLUSTER BY AUTO;
 
 -- Change keys later
-ALTER TABLE main.sales.orders CLUSTER BY (ts);
-ALTER TABLE main.sales.orders CLUSTER BY NONE;     -- disable
+ALTER TABLE dea_learning.silver.silver_orders CLUSTER BY (ts);
+ALTER TABLE dea_learning.silver.silver_orders CLUSTER BY NONE;     -- disable
 ```
 
 Trigger clustering work:
-- `OPTIMIZE main.sales.orders` — incremental, processes only new/modified data.
-- `OPTIMIZE main.sales.orders FULL` — full rewrite (use after `CLUSTER BY` change).
+- `OPTIMIZE dea_learning.silver.silver_orders` — incremental, processes only new/modified data.
+- `OPTIMIZE dea_learning.silver.silver_orders FULL` — full rewrite (use after `CLUSTER BY` change).
 
 Constraints:
 - Delta tables only.
 - DBR 13.3+ for explicit keys, **DBR 15.4 LTS+** for `CLUSTER BY AUTO`.
-- Max 4 clustering keys (16 in newer DBR).
+- Max 4 clustering keys (documented limit).
 - Cannot combine with `PARTITIONED BY`.
 
 ### Predictive Optimization (UC managed tables)
@@ -217,23 +217,24 @@ Databricks runs `OPTIMIZE`, `VACUUM`, and `ANALYZE` automatically on UC managed 
 
 ```sql
 -- Enable at any level (inheritance: account → catalog → schema → table)
-ALTER CATALOG main ENABLE PREDICTIVE OPTIMIZATION;
-ALTER SCHEMA  main.sales DISABLE PREDICTIVE OPTIMIZATION;
-ALTER SCHEMA  main.sales INHERIT PREDICTIVE OPTIMIZATION;
+ALTER CATALOG dea_learning ENABLE PREDICTIVE OPTIMIZATION;
+ALTER SCHEMA  dea_learning.silver DISABLE PREDICTIVE OPTIMIZATION;
+ALTER SCHEMA  dea_learning.silver INHERIT PREDICTIVE OPTIMIZATION;
 
 -- Check status
-DESCRIBE EXTENDED main.sales.orders;
+DESCRIBE EXTENDED dea_learning.silver.silver_orders;
 ```
 
 Excluded: external tables, Delta Sharing recipient tables, Hive metastore tables.
-Required: Premium workspace, UC managed Delta table, DBR 12.2 LTS+ or SQL warehouse.
+Required: Premium plan, UC managed Delta table, account-level PO enablement.
+PO uses its own serverless compute to run the work — the runtime that wrote the table is not the constraint.
 Note: predictive `OPTIMIZE` does **not** run `ZORDER` — use Liquid Clustering instead.
 
 ### `VACUUM` — remove tombstoned files
 
 ```sql
-VACUUM main.sales.orders;                       -- default 7 day retention
-VACUUM main.sales.orders RETAIN 168 HOURS;      -- explicit
+VACUUM dea_learning.silver.silver_orders;                       -- default 7 day retention
+VACUUM dea_learning.silver.silver_orders RETAIN 168 HOURS;      -- explicit
 ```
 
 Lower retention than 7 days requires `spark.databricks.delta.retentionDurationCheck.enabled = false` and breaks time travel beyond that point.
@@ -250,10 +251,14 @@ spark.conf.set("spark.sql.autoBroadcastJoinThreshold", -1)   # disable broadcast
 
 # Default parallelism — used by RDD operations without partition hints
 spark.conf.set("spark.default.parallelism", 200)
+```
 
-# Executor memory (cluster config, not runtime conf)
-spark.executor.memory = 14g
-spark.driver.memory   = 14g
+Executor / driver memory cannot be set at runtime — configure in the cluster UI under
+**Compute → cluster → Advanced options → Spark → Spark config**, one `key value` per line:
+
+```
+spark.executor.memory 14g
+spark.driver.memory   14g
 ```
 
 When to tune what:

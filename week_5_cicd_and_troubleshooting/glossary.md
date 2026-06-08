@@ -38,7 +38,8 @@
 | **Task** | Smallest unit of execution — one partition handled by one executor. |
 | **Skew** | Uneven partition size causing one task to take much longer than the rest. |
 | **Spill** | Data written from memory to disk during shuffle when out of memory. |
-| **Straggler task** | The slowest task in a stage that holds up the whole stage. |
+| **Straggler task** | The slowest task in a stage that holds up the whole stage — almost always caused by data skew on its partition. |
+| **AQE (Adaptive Query Execution)** | Runtime re-optimization based on observed shuffle stats. Default-on in DBR 7.3+. Handles dynamic partition coalescing and skew-join splitting automatically. Knobs: `spark.sql.adaptive.{enabled, coalescePartitions.enabled, skewJoin.enabled, localShuffleReader.enabled}`. |
 | **GC time** | Time the JVM spent garbage collecting — high = memory pressure. |
 | **Salt key** | Random suffix appended to a join/group key to redistribute skewed data. |
 | **Broadcast threshold** | `spark.sql.autoBroadcastJoinThreshold` — max table size for broadcast eligibility. |

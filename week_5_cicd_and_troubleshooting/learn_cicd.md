@@ -37,9 +37,9 @@ All from the Git Folder UI (top of the folder in workspace):
 ### Best practices
 
 - Each developer has their own Git Folder under `Workspace/Users/<email>/`.
-- Production schedules **never run from a personal Git Folder** — production runs deployed assets (notebooks/jars/wheels) from a shared `/Workspace/Shared/.bundle/<bundle>/<target>/files/...` path, written by a DAB deploy from CI.
+- Production schedules **never run from a personal Git Folder** — production runs deployed assets (notebooks/jars/wheels) from the bundle's deploy root (default `/Workspace/Users/<principal>/.bundle/<bundle>/<target>/files/...`), written by a DAB deploy from CI.
 - Keep notebooks small and modular — easier to diff and review.
-- Use `.gitignore`-style ignores via `.databricks/sync.exclude` or bundle `sync.exclude`.
+- Use the bundle's `sync.exclude` (or a regular `.gitignore` in Git Folders) to keep junk out of deploys.
 
 ### Bypassing the UI — Git CLI
 
@@ -292,7 +292,7 @@ jobs:
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN_STAGING }}
         run: |
           databricks bundle deploy -t staging
-          databricks bundle run integration_test -t staging
+          databricks bundle run orders_etl -t staging   # smoke-test the deployed job
 
   deploy_prod:
     needs: deploy_staging
@@ -380,9 +380,9 @@ DATABRICKS_CLIENT_SECRET="<sp-secret>"
 - Variable reference: `${var.foo}`. Override precedence: CLI > env var > target > default.
 - One target must be `default: true`.
 - `mode: development` → adds `[dev <user>]` prefix, pauses schedules. `mode: production` → strict, needs `run_as`.
-- Resource types in DAB: `jobs`, `pipelines`, `clusters`, `experiments`, `models`, `model_serving_endpoints`, `dashboards`, `volumes`, `schemas`, `quality_monitors`.
+- Resource types in DAB: `apps`, `clusters`, `dashboards`, `experiments`, `jobs`, `models`, `model_serving_endpoints`, `pipelines`, `quality_monitors`, `registered_models` (UC), `schemas`, `secret_scopes`, `synced_database_tables`, `volumes`.
 - Core CLI: `init`, `validate`, `deploy`, `run`, `summary`, `destroy`, `sync`, `generate`, `deployment bind/unbind`.
-- Git Folders are for **development**; bundle-deployed paths under `/Workspace/Shared/.bundle/…` are for **production**.
+- Git Folders are for **development**; bundle-deployed paths default to `/Workspace/Users/<principal>/.bundle/<bundle>/<target>/…` (a `Shared/…` root requires an explicit `workspace.root_path` override).
 - `databricks bundle generate` reverse-engineers UI-built resources to YAML.
 - `databricks bundle deployment bind` adopts an existing resource without recreating it.
 

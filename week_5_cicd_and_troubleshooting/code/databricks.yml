@@ -1,6 +1,17 @@
 # Week 5 · Declarative Automation Bundle for the medallion pipeline.
 # Deploys the Week 4 declarative pipeline + the orchestrating Lakeflow Job across dev / staging / prod targets.
-# Copy to a repo root, run `databricks bundle validate -t dev` then `databricks bundle deploy -t dev`.
+#
+# Before deploying, scaffold the bundle layout this file expects:
+#   .                          ← databricks.yml (this file)
+#   src/
+#   ├── pipeline_bronze_silver_gold.sql   ← copy from ../../week_4_pipelines_and_jobs/code/01_pipeline_bronze_silver_gold.sql
+#   ├── pipeline_auto_cdc_scd2.sql        ← copy from ../../week_4_pipelines_and_jobs/code/02_pipeline_auto_cdc_scd2.sql
+#   └── setup_catalog_and_seed.py         ← copy from ../../week_2_ingestion/code/00_setup_catalog_and_seed.py
+#
+# Per-target catalog convention: dev uses `dea_learning_dev`, staging `dea_learning_staging`, prod `dea_learning`.
+# Create those catalogs (and the matching landing volumes) before first deploy — see Week 2's setup script.
+#
+# Then: `databricks bundle validate -t dev` → `databricks bundle deploy -t dev`.
 
 bundle:
   name: dea_learning_orders

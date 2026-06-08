@@ -19,7 +19,7 @@ databricks bundle validate -t dev
 databricks bundle deploy -t dev
 
 # 5. Trigger a deployed job/pipeline and tail its progress -----------------
-databricks bundle run job_name -t dev
+databricks bundle run orders_etl -t dev    # use the resource key from your databricks.yml
 
 # 6. Show deployed-resource URLs -------------------------------------------
 databricks bundle summary -t dev
