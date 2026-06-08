@@ -56,9 +56,18 @@ WITH raw AS (
 )
 SELECT
   get_json_object(payload, '$.order_id')   AS order_id,
-  get_json_object(payload, '$.amount')     AS amount,
-  json_tuple(payload, 'customer_id', 'amount') AS (customer_id, amount2)
+  get_json_object(payload, '$.customer_id') AS customer_id,
+  get_json_object(payload, '$.amount')     AS amount
 FROM raw;
+
+-- json_tuple pulls multiple top-level keys at once, but it's a generator —
+-- it must be used via LATERAL VIEW, not aliased inline in SELECT.
+WITH raw AS (
+  SELECT '{"order_id":1001,"customer_id":1,"amount":139.97}' AS payload
+)
+SELECT t.cust, t.amt
+FROM   raw
+LATERAL VIEW json_tuple(payload, 'customer_id', 'amount') t AS cust, amt;
 
 -- COMMAND ----------
 

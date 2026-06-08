@@ -3,6 +3,10 @@
 -- MAGIC # Week 2 · Streaming Table via SQL (wraps Auto Loader)
 -- MAGIC The SQL form for incremental ingestion. Drop this notebook into a **Spark Declarative Pipeline**
 -- MAGIC and run an update.
+-- MAGIC
+-- MAGIC > **Heads-up.** This notebook targets `dea_learning.bronze.orders_bronze`, the same table that
+-- MAGIC > `02_autoloader_incremental_batch.py` writes to via the Python API. Run one or the other in isolation, or
+-- MAGIC > rename the target here, e.g. `orders_bronze_sdp`, to keep both around.
 
 -- COMMAND ----------
 

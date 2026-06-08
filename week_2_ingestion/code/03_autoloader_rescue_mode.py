@@ -2,13 +2,20 @@
 # MAGIC %md
 # MAGIC # Week 2 · Auto Loader — `rescue` mode against `orders_drift.json`
 # MAGIC `orders_drift.json` was crafted with:
-# MAGIC * a row where `amount` is the string `"not-a-number"` (type mismatch),
-# MAGIC * a row where `status` was uppercased into `Status` (case mismatch),
-# MAGIC * rows with extra fields (`channel`, `referral_code`) the schema doesn't know about.
+# MAGIC * a row where `amount` is the string `"not-a-number"` (**type mismatch**),
+# MAGIC * a row where `status` was uppercased into `Status` (**case mismatch**),
+# MAGIC * rows with extra fields (`channel`, `referral_code`) the schema doesn't know about (**missing-from-schema**).
 # MAGIC
 # MAGIC `rescue` mode keeps every row and captures the drift inside `_rescued_data`.
+# MAGIC
+# MAGIC > **Case sensitivity note.** By default Spark/Databricks matches column names case-**insensitively**, so the
+# MAGIC > `Status` field would land in the schema's `status` column without triggering rescue. To make case mismatches
+# MAGIC > rescue, set `spark.sql.caseSensitive = true` for this run.
 
 # COMMAND ----------
+
+# Enable case-sensitive matching so the `Status` (capital S) field is treated as distinct from `status`.
+spark.conf.set("spark.sql.caseSensitive", "true")
 
 CATALOG = "dea_learning"
 TARGET  = f"{CATALOG}.bronze.orders_bronze_rescue"

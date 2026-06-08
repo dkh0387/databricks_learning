@@ -3,6 +3,9 @@
 # MAGIC # Week 2 · Auto Loader — orders into bronze (incremental batch via `availableNow`)
 # MAGIC Three JSON files arrive over three days; the third one adds a `discount_amount` field so you can observe
 # MAGIC `addNewColumns` schema evolution end-to-end.
+# MAGIC
+# MAGIC `00_setup_catalog_and_seed.py` uploaded all three files at once. The cells below partition the demo into
+# MAGIC two runs by **physically moving day-3 aside** before the first run, then putting it back.
 
 # COMMAND ----------
 
@@ -10,14 +13,31 @@ CATALOG = "dea_learning"
 TARGET  = f"{CATALOG}.bronze.orders_bronze"
 
 LANDING     = f"/Volumes/{CATALOG}/raw/landing/orders"
+HOLDOUT     = f"/Volumes/{CATALOG}/raw/landing/_holdout"
 SCHEMA_PATH = f"/Volumes/{CATALOG}/raw/landing/_checkpoints/orders/schema"
 CHECKPOINT  = f"/Volumes/{CATALOG}/raw/landing/_checkpoints/orders/checkpoint"
+
+DAY3 = "orders_2026-06-03.json"
+
+# COMMAND ----------
+
+# Reset: drop target + checkpoints so we can replay cleanly. Move day-3 out of the landing dir.
+dbutils.fs.rm(SCHEMA_PATH, recurse=True)
+dbutils.fs.rm(CHECKPOINT,  recurse=True)
+spark.sql(f"DROP TABLE IF EXISTS {TARGET}")
+
+dbutils.fs.mkdirs(HOLDOUT)
+try:
+    dbutils.fs.mv(f"{LANDING}/{DAY3}", f"{HOLDOUT}/{DAY3}")
+    print(f"Moved {DAY3} to holdout.")
+except Exception:
+    print(f"{DAY3} already moved to holdout.")
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ### Run 1 — only `orders_2026-06-01.json` and `orders_2026-06-02.json` are present
-# MAGIC Auto Loader infers the schema (including the nested `items` array of structs), lands rows, exits.
+# MAGIC ### Run 1 — only days 1 and 2 visible
+# MAGIC Auto Loader infers the schema (including the nested `items` array of structs), lands rows, exits cleanly.
 
 # COMMAND ----------
 
@@ -43,8 +63,14 @@ display(spark.sql(f"""
 
 # COMMAND ----------
 
+# Put day 3 back so the next run sees it
+dbutils.fs.mv(f"{HOLDOUT}/{DAY3}", f"{LANDING}/{DAY3}")
+print(f"Restored {DAY3} to landing.")
+
+# COMMAND ----------
+
 # MAGIC %md
-# MAGIC ### Run 2 — `orders_2026-06-03.json` arrives with the new `discount_amount` field
+# MAGIC ### Run 2 — day 3 arrives with the new `discount_amount` field
 # MAGIC With the default `addNewColumns` evolution mode this run **fails once** with `UnknownFieldException` — by design.
 # MAGIC The schema location is updated; the next run picks up the new column.
 

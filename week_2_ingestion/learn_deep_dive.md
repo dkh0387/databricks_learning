@@ -30,11 +30,11 @@ The exam tests this in scenario form ("which ingestion approach should the engin
 
 ```sql
 -- 1. Empty target must exist
-CREATE TABLE main.bronze.orders (id BIGINT, amount DOUBLE, ts TIMESTAMP, region STRING)
+CREATE TABLE dea_learning.bronze.orders (id BIGINT, amount DOUBLE, ts TIMESTAMP, region STRING)
 USING DELTA;
 
 -- 2. Load
-COPY INTO main.bronze.orders
+COPY INTO dea_learning.bronze.orders
 FROM 's3://landing/orders/'
 FILEFORMAT = PARQUET
 FORMAT_OPTIONS ('mergeSchema' = 'true')
@@ -48,13 +48,13 @@ COPY_OPTIONS  ('mergeSchema' = 'true', 'force' = 'false');
 - **`mergeSchema = true`** in `COPY_OPTIONS` → table evolves to accept new columns.
 - Subset selection at load time:
   ```sql
-  COPY INTO main.bronze.orders
+  COPY INTO dea_learning.bronze.orders
   FROM (SELECT id, amount, ts, region FROM 's3://landing/orders/')
   FILEFORMAT = PARQUET;
   ```
 - File pattern / subset:
   ```sql
-  COPY INTO main.bronze.orders
+  COPY INTO dea_learning.bronze.orders
   FROM 's3://landing/orders/'
   FILEFORMAT = JSON
   PATTERN = '*2026-*.json'
@@ -86,12 +86,12 @@ Switch with `cloudFiles.useNotifications = true` (Auto Loader auto-creates queue
 (spark.readStream
    .format("cloudFiles")
    .option("cloudFiles.format", "json")
-   .option("cloudFiles.schemaLocation", "/Volumes/main/checkpoints/orders/schema")
-   .load("/Volumes/main/landing/orders")
+   .option("cloudFiles.schemaLocation", "/Volumes/dea_learning/raw/checkpoints/orders/schema")
+   .load("/Volumes/dea_learning/raw/landing/orders")
    .writeStream
-   .option("checkpointLocation", "/Volumes/main/checkpoints/orders/checkpoint")
+   .option("checkpointLocation", "/Volumes/dea_learning/raw/checkpoints/orders/checkpoint")
    .trigger(availableNow=True)         # one-shot drain (incremental batch)
-   .toTable("main.bronze.orders"))
+   .toTable("dea_learning.bronze.orders"))
 ```
 
 Triggers:
@@ -130,7 +130,7 @@ Inspect in silver to catch upstream changes:
 
 ```sql
 SELECT _metadata.file_path, _rescued_data
-FROM main.bronze.orders
+FROM dea_learning.bronze.orders
 WHERE _rescued_data IS NOT NULL
 LIMIT 100;
 ```
@@ -165,11 +165,11 @@ Both must be durable (cloud storage / UC volume), not local disk.
 The SQL form wraps Auto Loader for you — no Python plumbing:
 
 ```sql
-CREATE OR REFRESH STREAMING TABLE main.bronze.orders
+CREATE OR REFRESH STREAMING TABLE dea_learning.bronze.orders
 COMMENT "Raw orders from landing zone"
 AS SELECT *, _metadata.file_path AS source_file
    FROM STREAM read_files(
-     '/Volumes/main/landing/orders',
+     '/Volumes/dea_learning/raw/landing/orders',
      format        => 'json',
      schemaHints   => 'amount DOUBLE, ts TIMESTAMP',
      schemaEvolutionMode => 'addNewColumns'
@@ -187,7 +187,7 @@ def bronze_orders():
         .format("cloudFiles")
         .option("cloudFiles.format", "json")
         .option("cloudFiles.schemaHints", "amount DOUBLE, ts TIMESTAMP")
-        .load("/Volumes/main/landing/orders"))
+        .load("/Volumes/dea_learning/raw/landing/orders"))
 ```
 
 ## 5. JSON and nested data
@@ -198,7 +198,7 @@ Two modes:
 
 ```sql
 -- 1. Schema-on-read (Auto Loader infers, sees nested struct)
-SELECT * FROM read_files('/Volumes/main/landing/events', format => 'json');
+SELECT * FROM read_files('/Volumes/dea_learning/raw/landing/events', format => 'json');
 
 -- 2. Parse a stringified JSON column inside an already-loaded table
 SELECT from_json(payload_json, 'STRUCT<id: BIGINT, items: ARRAY<STRUCT<sku: STRING, qty: INT>>>') AS payload
@@ -260,7 +260,7 @@ df = (spark.read
   .option("numPartitions", 8)
   .load())
 
-df.write.mode("append").saveAsTable("main.bronze.orders_pg")
+df.write.mode("append").saveAsTable("dea_learning.bronze.orders_pg")
 ```
 
 Key options for parallelism: `partitionColumn`, `lowerBound`, `upperBound`, `numPartitions`. Without them you get one executor pulling the whole table — slow.
@@ -270,7 +270,7 @@ Key options for parallelism: `partitionColumn`, `lowerBound`, `upperBound`, `num
 No first-class connector; use `requests` (Python) or `dbutils` plus secrets:
 
 ```python
-import requests, json
+import requests, json, time
 from pyspark.sql.types import StringType
 
 token = dbutils.secrets.get("ops", "vendor_token")
@@ -279,7 +279,7 @@ resp  = requests.get("https://api.vendor.com/v1/events?since=2026-06-01",
 resp.raise_for_status()
 
 # Write raw payload to a Volume so Auto Loader can later pick it up
-with open(f"/Volumes/main/landing/vendor/events_{int(time.time())}.json", "w") as f:
+with open(f"/Volumes/dea_learning/raw/landing/vendor/events_{int(time.time())}.json", "w") as f:
     json.dump(resp.json(), f)
 ```
 
@@ -332,7 +332,7 @@ You configure once; Databricks runs the pipeline, handles schema drift, retries,
 - **Manual file uploads land in DBFS**, not UC — for governance, ingest to a UC Volume instead.
 - **JDBC without partitioning options = single executor** — always set them on big tables.
 - **Auto Loader `directory listing` becomes slow above ~100k files** — switch to `file notification` mode.
-- **Lakeflow Connect managed connectors are CDC by default** — schema drift handled, but source needs CDC enabled (e.g., SQL Server: enable CDC on the DB; see `0_databricks_platform.md`/`README.md`).
+- **Lakeflow Connect managed connectors are CDC by default** — schema drift handled, but source needs CDC enabled (e.g., SQL Server: enable CDC on the DB; see `../week_1_platform/learn.md` / `../README.md`).
 
 ## 9. Exam-day quick reference
 

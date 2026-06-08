@@ -23,8 +23,9 @@
 | **Schema inference** | Auto Loader sampling the first 50 GB or 1,000 files to infer schema. JSON/CSV/XML default to STRING types. |
 | **Schema hints** | `cloudFiles.schemaHints` override inferred types per column. |
 | **`addNewColumns`** | Default evolution mode. New column → stream throws `UnknownFieldException` once, schema updated, restart picks up. |
+| **`addNewColumnsWithTypeWidening`** | Like `addNewColumns` plus widens compatible types (INT→BIGINT); incompatible diffs go to `_rescued_data`. |
 | **`rescue`** | Evolution mode that never updates schema — unmatched fields land in `_rescued_data`. |
-| **`failOnNewColumns`** | Strict mode — stream fails permanently on new column. |
+| **`failOnNewColumns`** | Strict mode — stream fails permanently on new column until schema is manually updated. |
 | **`none`** | Schema-supplied mode — ignore new columns silently. |
 | **`_rescued_data`** | JSON STRING column holding fields/values that didn't fit the schema (missing col, type/case mismatch). |
 | **`_metadata`** | Hidden struct on file sources exposing `file_path`, `file_name`, `file_size`, `file_modification_time`, … |
@@ -38,3 +39,6 @@
 | **VARIANT** | DBR 15.3+ semi-structured type — schema-less JSON storage, query with `:` operator. |
 | **CDC** | Change Data Capture — propagating inserts/updates/deletes from source DB to target. |
 | **SCD Type 1 / Type 2** | Slowly Changing Dimension patterns — overwrite vs preserve history with validity periods. |
+| **Lakehouse Federation** | Query external data sources (other DBs, lakehouses) without copying data into Databricks. Useful for POC / virtualization. |
+| **Delta Sharing** | Open protocol for read-only data sharing across orgs, clouds, regions, without copy. Covered in Week 6. |
+| **Databricks Marketplace** | Open exchange for data products: datasets, notebooks, ML models, dashboards. |

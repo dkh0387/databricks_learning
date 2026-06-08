@@ -70,14 +70,16 @@ Ingesting data from enterprises sources: SaaS, databases, etc.
     ```
 
     ```python
-   spark.read.load()
+   spark.read.format("csv").option("header", True).load("/Volumes/<catalog>/<schema>/<volume>/<path>")
    ```
 
-2. `COPY INTO` (**incremental batch**): creates an empty Delta table to copy data into. It skips files that have already
-   been loaded, so it is retriable and idempotent. **Ideal if:** cloud storage location is continuously adding files.
+2. `COPY INTO` (**incremental batch**): loads files into an existing Delta table. Tracks loaded files in the table's
+   commit log so it is retriable and idempotent. **Ideal if:** cloud storage location is continuously adding files.
 
     ```sql
-    CREATE TABLE new_table;
+    -- target must exist with a schema (or use mergeSchema=true on a column-less table)
+    CREATE TABLE new_table (id BIGINT, amount DOUBLE) USING DELTA;
+
     COPY INTO new_table FROM '<dir_path>'
     FILEFORMAT = <file_type>
     FORMAT_OPTIONS(<options>)
@@ -86,13 +88,14 @@ Ingesting data from enterprises sources: SaaS, databases, etc.
 
 3. `AUTO LOADER` (**incremental batch or streaming**): processes new files in either a batch or streaming manner as they
    arrive in cloud storage.
-   **Ideal if:** billion of files in cloud storage, so it is built to scale.
+   **Ideal if:** billions of files in cloud storage, so it is built to scale.
 
     ```sql
-   -- Auto Loader: STREAM + read_files()
+   -- Auto Loader as a scheduled streaming table (serverless SQL — outside Spark Declarative Pipelines)
     CREATE OR REFRESH STREAMING TABLE catalog.schema.table
     SCHEDULE EVERY 1 HOUR AS
     SELECT * FROM STREAM read_files('<dir_path>', format => <'file_type'>)
+    -- Inside a Spark Declarative Pipeline you omit SCHEDULE; the pipeline's trigger config controls it.
     ```
 
     ```python
@@ -136,17 +139,19 @@ type (DBR 15.3+). Full coverage with examples in `learn_deep_dive.md` §5.
 
 ![Data Ingestion from Enterprise Sources (SaaS, databases)](../images/ingestion_managed.png)
 
-- Uses serverless declarative pipeline jobs to collect credentials from unity catalog and to reach data sources
-- Data is being stored in streaming delta tables
+- Uses **serverless Spark Declarative Pipelines** to collect credentials from Unity Catalog and to reach data sources
+- Data is stored in streaming Delta tables
 - Architecture:
     - **Ingestion gateway:** collects credentials from Unity Catalog and connects to databases. Limits the number of
-      direct
-      connections to the database and can be installed inside the network to avoid firewall issues
-    - **Unity catalog volume:** intermediate staging layer enabling pipelines to pick up and stream data
-    - **Managed ingestion pipeline:** collects data and stores it in streaming delta tables
-        - Partner connect: third party connectors to ingest data from various sources if there is no managed connector
-          available. It acts between your data source and Databricks Lakehouse and enables you to use Lakeflow Connect
-          with not directly supported data sources
+      direct connections to the database and can be installed inside the network to avoid firewall issues
+    - **Unity Catalog volume:** intermediate staging layer enabling pipelines to pick up and stream data
+    - **Managed ingestion pipeline:** collects data and stores it in streaming Delta tables
+
+### Partner Connect (separate concept)
+
+A marketplace of **third-party connectors** for sources without a native Lakeflow Connect connector. Sits between
+your data source and the lakehouse and lets you use Lakeflow Connect-style ingestion with sources Databricks doesn't
+support directly. Not part of the managed-connector architecture above — a separate option in the connector decision.
 
 ## Additional Features
 
