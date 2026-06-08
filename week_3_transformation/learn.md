@@ -30,7 +30,7 @@ df.dropna(thresh=3)                         # keep rows with ≥3 non-nulls
 # Fill nulls
 df.fillna(0)                                # all numeric cols → 0
 df.fillna({"city": "unknown", "age": 0})    # per-col map
-df.na.replace("N/A", None, "city")          # treat sentinel as null
+df.na.replace("N/A", None, subset=["city"]) # treat sentinel as null
 ```
 
 ```sql
@@ -96,10 +96,11 @@ a.join(broadcast(b), "key")
 ```
 
 ```sql
--- BROADCAST hint
-SELECT /*+ BROADCAST(d) */ f.*, d.country
-FROM fact f
-JOIN dim_country d ON f.country_code = d.code;
+-- BROADCAST hint — items catalog is small (~15 rows), perfect to broadcast onto each order
+SELECT /*+ BROADCAST(i) */ o.order_id, item.item_id, i.name, i.category
+FROM   dea_learning.bronze.orders_bronze o
+LATERAL VIEW explode(o.items) AS item
+JOIN   dea_learning.bronze.items_bronze i ON item.item_id = i.item_id;
 
 -- UNION vs UNION ALL
 SELECT * FROM a UNION     SELECT * FROM b;     -- deduplicated
@@ -148,10 +149,11 @@ df.filter(col("email").rlike(".+@.+\\..+"))
 ```python
 from pyspark.sql.functions import explode, explode_outer, posexplode, col
 
-# array column "items" → one row per element
-df.withColumn("item", explode("items"))            # drops rows with empty/null
-df.withColumn("item", explode_outer("items"))      # keeps them as null
-df.select(posexplode("items").alias("pos", "item"))
+# array column "items" → one row per element. Prefer .select() over .withColumn() —
+# explode is a generator; using it in withColumn is deprecated.
+df.select("*", explode("items").alias("item"))            # drops rows with empty/null
+df.select("*", explode_outer("items").alias("item"))      # keeps them as null
+df.select(posexplode("items").alias("pos", "item"))       # returns (pos, col) pair
 
 # struct column → flatten
 df.select("id", "address.*")                       # struct fields become top-level cols
@@ -252,8 +254,12 @@ FROM silver.orders;
 spark.conf.set("spark.sql.shuffle.partitions", 400)
 spark.conf.set("spark.sql.autoBroadcastJoinThreshold", 50 * 1024 * 1024)
 spark.conf.set("spark.sql.autoBroadcastJoinThreshold", -1)        # disable
+```
 
-# Cluster config (Compute → Advanced → Spark) — memory must be set here, not at runtime
+Executor / driver memory cannot be set at runtime — configure in the cluster UI under
+**Compute → cluster → Advanced options → Spark → Spark config**, one `key value` per line:
+
+```
 spark.executor.memory 14g
 spark.driver.memory   14g
 ```
@@ -297,21 +303,21 @@ Otherwise (lightweight projection / filter / security view)?
 
 ```sql
 -- Regular Delta table
-CREATE TABLE main.gold.daily_sales (...) USING DELTA;
+CREATE TABLE dea_learning.gold.daily_sales (...) USING DELTA;
 
 -- View
-CREATE OR REPLACE VIEW main.gold.eu_customers AS
-SELECT * FROM main.silver.customers WHERE region = 'EU';
+CREATE OR REPLACE VIEW dea_learning.gold.eu_customers AS
+SELECT * FROM dea_learning.silver.customers WHERE region = 'EU';
 
 -- Materialized view (in a Spark Declarative Pipeline)
-CREATE OR REFRESH MATERIALIZED VIEW main.gold.daily_revenue AS
+CREATE OR REFRESH MATERIALIZED VIEW dea_learning.gold.daily_revenue AS
 SELECT order_date, sum(amount) AS revenue
-FROM main.silver.orders
+FROM dea_learning.silver.orders
 GROUP BY order_date;
 
--- Streaming table (in a Spark Declarative Pipeline)
-CREATE OR REFRESH STREAMING TABLE main.silver.orders AS
-SELECT * FROM STREAM read_files('/Volumes/bronze/orders', format => 'json');
+-- Streaming table (in a Spark Declarative Pipeline) — bronze target, fed by raw files
+CREATE OR REFRESH STREAMING TABLE dea_learning.bronze.orders_bronze AS
+SELECT * FROM STREAM read_files('/Volumes/dea_learning/raw/landing/orders', format => 'json');
 ```
 
 ### Limits to remember
@@ -339,7 +345,9 @@ CREATE OR REFRESH STREAMING TABLE silver.orders (
 @dlt.expect_or_drop("valid_id", "order_id IS NOT NULL")    # DROP
 @dlt.expect_or_fail("valid_country", "country IS NOT NULL")# FAIL
 def silver_orders():
-    return spark.readStream.table("bronze.orders")
+    # For sibling pipeline tables, prefer dlt.read_stream(...) over spark.readStream.table(...)
+    # — it registers the dependency in the pipeline graph rather than going through the metastore.
+    return dlt.read_stream("bronze_orders")
 ```
 
 Three modes:
@@ -349,7 +357,7 @@ Three modes:
 
 Inspect violations:
 ```sql
-SELECT * FROM event_log("main.pipelines.orders_pipeline")
+SELECT * FROM event_log("dea_learning.pipelines.orders_pipeline")
 WHERE event_type = 'flow_progress'
   AND details:flow_progress:metrics:expectations IS NOT NULL;
 ```
@@ -377,7 +385,7 @@ Rejected writes fail the transaction. Use this for invariants you never want to 
 - Materialized view incremental refresh requires **serverless**.
 - `spark.sql.shuffle.partitions = 200` is the default — change it to fix spill / tiny tasks.
 - `spark.sql.autoBroadcastJoinThreshold = 10 MB` — raise to broadcast bigger dims, `-1` to disable.
-- DLT expectations: `expect` = warn, `expect_or_drop` = drop, `expect_or_fail` = stop pipeline.
+- Spark Declarative Pipeline expectations (formerly DLT): `expect` = warn, `expect_or_drop` = drop, `expect_or_fail` = stop pipeline.
 
 ## References
 

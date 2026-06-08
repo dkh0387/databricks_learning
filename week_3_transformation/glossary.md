@@ -35,6 +35,9 @@
 | **`spark.sql.autoBroadcastJoinThreshold`** | Max size (bytes) for broadcast join eligibility (default 10 MB). |
 | **Skew** | One partition holds dramatically more data than others — straggler tasks. |
 | **Spill** | Data written from memory to disk during shuffle when memory runs out. |
+| **Photon** | Vectorized C++ execution engine. Toggle at cluster level. Free speed-up on SQL/DataFrame; no benefit on Python/Scala UDFs or RDDs. |
+| **`coalesce` (function)** | Null-handling: returns the first non-null argument across columns — `coalesce(a, b, 0)`. |
+| **`coalesce` (DataFrame method)** | Partition operation: reduces the number of partitions without a full shuffle — `df.coalesce(8)`. |
 | **Gold table** | Persisted Delta table you manage manually (custom MERGE/UPDATE/DELETE). |
 | **Gold view** | Saved SQL query; no storage; recomputed at query time. |
 | **Materialized view** | Stored query result; refreshed by a pipeline; CANNOT be a streaming source. |

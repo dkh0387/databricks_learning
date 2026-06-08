@@ -59,11 +59,26 @@ FROM   oi JOIN i USING (item_id);
 
 -- COMMAND ----------
 
--- MULTI-key join — customers × orders flattened to one row per (customer, order)
+-- Single-key explicit ON — customers × orders, one row per (customer, order)
 SELECT c.customer_id, c.name, c.region, o.order_id, o.amount, o.currency
 FROM   c
 JOIN   dea_learning.bronze.orders_bronze o ON c.customer_id = o.customer_id
 ORDER BY c.customer_id, o.order_id;
+
+-- COMMAND ----------
+
+-- MULTI-key join — join line items back to themselves on (order_id, item_id) to attach
+-- the per-order context (currency, order_amount) onto each line. Two equality conditions.
+SELECT
+  oi.order_id, oi.item_id, oi.quantity, oi.unit_price,
+  ctx.currency, ctx.order_amount
+FROM   oi
+JOIN (
+  SELECT DISTINCT order_id, item_id, currency, order_amount FROM oi
+) ctx
+  ON oi.order_id = ctx.order_id
+ AND oi.item_id  = ctx.item_id
+ORDER BY oi.order_id, oi.item_id;
 
 -- COMMAND ----------
 

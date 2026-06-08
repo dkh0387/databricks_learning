@@ -75,7 +75,9 @@ FROM (
 
 -- COMMAND ----------
 
--- 5. Pivot — daily revenue by region
+-- 5. Pivot — daily revenue by region.
+-- NOTE: PIVOT only surfaces explicitly named values; any region missing from the IN list is dropped.
+-- The IN list below covers every region produced by silver_customers' country-to-region mapping.
 SELECT *
 FROM (
   SELECT to_date(o.order_ts) AS d, c.region, o.amount
@@ -83,6 +85,13 @@ FROM (
   JOIN   silver.customers_silver c USING (customer_id)
 )
 PIVOT (
-  sum(amount) FOR region IN ('EU' AS revenue_eu, 'NA' AS revenue_na, 'APAC' AS revenue_apac)
+  sum(amount) FOR region IN (
+    'EU'    AS revenue_eu,
+    'NA'    AS revenue_na,
+    'APAC'  AS revenue_apac,
+    'LATAM' AS revenue_latam,
+    'EMEA'  AS revenue_emea,
+    'OTHER' AS revenue_other
+  )
 )
 ORDER BY d;
