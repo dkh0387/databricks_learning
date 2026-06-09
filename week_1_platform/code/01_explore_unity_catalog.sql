@@ -11,15 +11,33 @@ SHOW CATALOGS;
 
 -- COMMAND ----------
 
+-- List all external locations visible to you
+-- Note: the location is needed in the next step to create a catalog
+SHOW EXTERNAL LOCATIONS;
+
+-- COMMAND ----------
+
+-- Setup Unity Catalog
+CREATE CATALOG IF NOT EXISTS dea_learning MANAGED LOCATION 'abfss://unity-catalog-storage@dbstorageghdo4vkcqfmqq.dfs.core.windows.net/185960349365378/dea_learning';
+CREATE SCHEMA IF NOT EXISTS dea_learning.raw;
+CREATE SCHEMA IF NOT EXISTS dea_learning.bronze;
+CREATE SCHEMA IF NOT EXISTS dea_learning.silver;
+CREATE SCHEMA IF NOT EXISTS dea_learning.gold;
+CREATE SCHEMA IF NOT EXISTS dea_learning.sec;
+CREATE VOLUME IF NOT EXISTS dea_learning.raw.landing;
+
+-- COMMAND ----------
+
 -- Pick one and list its schemas
 SHOW SCHEMAS IN dea_learning;
 
 -- COMMAND ----------
 
 -- List tables, views, volumes inside a schema
-SHOW TABLES   IN dea_learning.bronze;
-SHOW VIEWS    IN dea_learning.bronze;
-SHOW VOLUMES  IN dea_learning.bronze;
+USE CATALOG dea_learning;
+SHOW TABLES IN raw;
+SHOW VIEWS IN raw;
+SHOW VOLUMES IN raw;
 
 -- COMMAND ----------
 

@@ -38,7 +38,7 @@ DESCRIBE DETAIL managed_orders;     -- look at numFiles and location
 
 CREATE OR REPLACE TABLE external_orders (id INT, amount DOUBLE)
 USING DELTA
-LOCATION '/Volumes/dea_learning/raw/external_data/external_orders';     -- external volume path
+LOCATION 'abfss://unity-catalog-storage@dbstorageghdo4vkcqfmqq.dfs.core.windows.net/185960349365378/external/external_orders';
 
 INSERT INTO external_orders VALUES (1, 9.99), (2, 19.99);
 
@@ -50,16 +50,24 @@ DESCRIBE EXTENDED external_orders;   -- Type = EXTERNAL
 DROP TABLE managed_orders;
 DROP TABLE external_orders;
 
+-- COMMAND ----------
+
 -- MAGIC %python
 -- MAGIC # Managed table's files are gone (UC deleted them).
 -- MAGIC # External table's files survive because they live in an external volume / cloud location.
--- MAGIC display(dbutils.fs.ls("/Volumes/dea_learning/raw/external_data/external_orders"))
+-- MAGIC try:
+-- MAGIC     display(dbutils.fs.ls("abfss://unity-catalog-storage@dbstorageghdo4vkcqfmqq.dfs.core.windows.net/185960349365378/dea_learning/__unitystorage/catalogs/3e756225-87cf-4374-9e79-9a3db1c5fe24/tables/20525318-7259-42f6-9d15-489c355cabf7"))
+-- MAGIC except Exception as e:
+-- MAGIC     print(f"✓ Managed table path is not accessible (UC controls managed storage): {e}")
+-- MAGIC
+-- MAGIC print("\n✓ External table files still exist:")
+-- MAGIC display(dbutils.fs.ls("abfss://unity-catalog-storage@dbstorageghdo4vkcqfmqq.dfs.core.windows.net/185960349365378/external/external_orders"))
 
 -- COMMAND ----------
 
 -- Recover the external table — same path, no data re-write needed
 CREATE TABLE external_orders
 USING DELTA
-LOCATION '/Volumes/dea_learning/raw/external_data/external_orders';
+LOCATION 'abfss://unity-catalog-storage@dbstorageghdo4vkcqfmqq.dfs.core.windows.net/185960349365378/external/external_orders';
 
 SELECT * FROM external_orders;
