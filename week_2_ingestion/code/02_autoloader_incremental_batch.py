@@ -41,25 +41,30 @@ except Exception:
 
 # COMMAND ----------
 
-(spark.readStream
-   .format("cloudFiles")
-   .option("cloudFiles.format", "json")
-   .option("cloudFiles.schemaLocation", SCHEMA_PATH)
-   .option("cloudFiles.schemaHints", "order_id BIGINT, customer_id BIGINT, amount DOUBLE, order_ts TIMESTAMP")
-   .load(LANDING)
-   .writeStream
-   .option("checkpointLocation", CHECKPOINT)
-   .trigger(availableNow=True)
-   .toTable(TARGET)
-   .awaitTermination())
+(
+    spark.readStream.format("cloudFiles")
+    .option("cloudFiles.format", "json")
+    .option("cloudFiles.schemaLocation", SCHEMA_PATH)
+    .option(
+        "cloudFiles.schemaHints",
+        "order_id BIGINT, customer_id BIGINT, amount DOUBLE, order_ts TIMESTAMP",
+    )
+    .load(LANDING)
+    .writeStream.option("checkpointLocation", CHECKPOINT)
+    .trigger(availableNow=True)
+    .toTable(TARGET)
+    .awaitTermination()
+)
 
-display(spark.sql(f"""
+display(
+    spark.sql(f"""
   SELECT order_id, customer_id, status, currency, amount,
-         size(items) AS line_item_count,
+         size(from_json(items, 'ARRAY<STRUCT<item_id: STRING, quantity: INT, unit_price: DOUBLE>>')) AS line_item_count,
          _metadata.file_name AS source
   FROM   {TARGET}
   ORDER BY order_id
-"""))
+""")
+)
 
 # COMMAND ----------
 
@@ -81,9 +86,11 @@ try:
        .format("cloudFiles")
        .option("cloudFiles.format", "json")
        .option("cloudFiles.schemaLocation", SCHEMA_PATH)
+       .option("cloudFiles.schemaEvolutionMode", "addNewColumns") # default but just to be explicit
        .load(LANDING)
        .writeStream
        .option("checkpointLocation", CHECKPOINT)
+       .option("mergeSchema", "true")
        .trigger(availableNow=True)
        .toTable(TARGET)
        .awaitTermination())
@@ -99,15 +106,17 @@ except Exception as e:
 # COMMAND ----------
 
 (spark.readStream
-   .format("cloudFiles")
-   .option("cloudFiles.format", "json")
-   .option("cloudFiles.schemaLocation", SCHEMA_PATH)
-   .load(LANDING)
-   .writeStream
-   .option("checkpointLocation", CHECKPOINT)
-   .trigger(availableNow=True)
-   .toTable(TARGET)
-   .awaitTermination())
+    .format("cloudFiles")
+    .option("cloudFiles.format", "json")
+    .option("cloudFiles.schemaLocation", SCHEMA_PATH)
+    .option("cloudFiles.schemaEvolutionMode", "addNewColumns") # default but just to be explicit
+    .load(LANDING)
+    .writeStream
+    .option("checkpointLocation", CHECKPOINT)
+    .option("mergeSchema", "true")
+    .trigger(availableNow=True)
+    .toTable(TARGET)
+    .awaitTermination())
 
 display(spark.sql(f"""
   SELECT order_id, customer_id, status, amount, discount_amount,

@@ -30,10 +30,17 @@ SELECT * FROM parquet.`${dataset.bookstore}/orders`
 
 -- COMMAND ----------
 
+
 DESCRIBE HISTORY orders
 
 -- COMMAND ----------
 
+/*
+Another way to overwrite a table.
+In diffence to CREATE OR REPLACE, this:
+- can only overwrite an existing table
+- can only overwrite with data matching the table schema
+*/
 INSERT OVERWRITE orders
 SELECT * FROM parquet.`${dataset.bookstore}/orders`
 
@@ -43,6 +50,9 @@ DESCRIBE HISTORY orders
 
 -- COMMAND ----------
 
+/*
+ERROR: table schema doesn't match the data schema.
+*/
 INSERT OVERWRITE orders
 SELECT *, current_timestamp() FROM parquet.`${dataset.bookstore}/orders`
 
@@ -53,6 +63,10 @@ SELECT *, current_timestamp() FROM parquet.`${dataset.bookstore}/orders`
 
 -- COMMAND ----------
 
+/*
+NOTE: by multiple execution duplicate records will be inserted.
+Reason: we are not providing a unique key for merge.
+*/
 INSERT INTO orders
 SELECT * FROM parquet.`${dataset.bookstore}/orders-new`
 
@@ -67,6 +81,9 @@ SELECT count(*) FROM orders
 
 -- COMMAND ----------
 
+/*
+We avoid to insert duplicate records by using MERGE INTO.
+*/
 CREATE OR REPLACE TEMP VIEW customers_updates AS 
 SELECT * FROM json.`${dataset.bookstore}/customers-json-new`;
 

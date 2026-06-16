@@ -8,14 +8,15 @@
 # MAGIC
 # MAGIC `rescue` mode keeps every row and captures the drift inside `_rescued_data`.
 # MAGIC
-# MAGIC > **Case sensitivity note.** By default Spark/Databricks matches column names case-**insensitively**, so the
-# MAGIC > `Status` field would land in the schema's `status` column without triggering rescue. To make case mismatches
-# MAGIC > rescue, set `spark.sql.caseSensitive = true` for this run.
+# MAGIC > **Case sensitivity note.** By default Spark/Databricks does not match column names case-**insensitively**, so the
+# MAGIC > `Status` field would not land in the schema's `status` column. To make case matches
+# MAGIC > rescue, set `.option("readerCaseSensitive", "false")` in read options for this run.
 
 # COMMAND ----------
 
-# Enable case-sensitive matching so the `Status` (capital S) field is treated as distinct from `status`.
-spark.conf.set("spark.sql.caseSensitive", "true")
+# NOTE: spark.sql.caseSensitive is not available on Serverless compute.
+# On Serverless, `Status` matches `status` case-insensitively (no rescue for case mismatch).
+# Type mismatches and unknown fields will still be rescued.
 
 CATALOG = "dea_learning"
 TARGET  = f"{CATALOG}.bronze.orders_bronze_rescue"
@@ -31,6 +32,7 @@ CHECKPOINT  = f"/Volumes/{CATALOG}/raw/landing/_checkpoints/orders_rescue/checkp
    .option("cloudFiles.format", "json")
    .option("cloudFiles.schemaLocation", SCHEMA_PATH)
    .option("cloudFiles.schemaEvolutionMode", "rescue")
+   #.option("readerCaseSensitive", "false")          # <-- case-insensitive column matching
    .option("cloudFiles.schemaHints",
            "order_id BIGINT, customer_id BIGINT, amount DOUBLE, status STRING, currency STRING")
    .load(LANDING)

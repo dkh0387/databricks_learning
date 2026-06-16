@@ -4,14 +4,12 @@
 -- MAGIC The SQL form for incremental ingestion. Drop this notebook into a **Spark Declarative Pipeline**
 -- MAGIC and run an update.
 -- MAGIC
--- MAGIC > **Heads-up.** This notebook targets `dea_learning.bronze.orders_bronze`, the same table that
--- MAGIC > `02_autoloader_incremental_batch.py` writes to via the Python API. Run one or the other in isolation, or
--- MAGIC > rename the target here, e.g. `orders_bronze_sdp`, to keep both around.
+-- MAGIC > **Heads-up.** This notebook mirrows `04_streaming_table_sql` ETL pipeline, all `CREATE OR REFRESH STREAMING TABLE` operations could fail by running them inside the notebook due to: `The operation CREATE is not allowed: Cannot CREATE the Streaming Table `dea_learning`.`bronze`.`orders_bronze_sdp` in Serverless Generic Compute for your workspace. Enable it by enrolling in the Serverless Generic Compute Materialized View/Streaming Table workspace feature preview. If you do not see the beta feature preview available in workspace, please contact your Databricks representative. SQLSTATE: 42601`
 
 -- COMMAND ----------
 
 -- 1. ORDERS bronze — incremental from JSON
-CREATE OR REFRESH STREAMING TABLE dea_learning.bronze.orders_bronze
+CREATE OR REFRESH STREAMING TABLE dea_learning.bronze.orders_bronze_sdp
 COMMENT 'Raw orders, one row per order with a nested items array'
 AS SELECT
      *,

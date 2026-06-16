@@ -25,13 +25,20 @@ DESCRIBE customers
 
 -- COMMAND ----------
 
+/*
+Direct access to nested JSON fields.
+*/
 SELECT customer_id, profile:first_name, profile:address:country 
 FROM customers
 
 -- COMMAND ----------
 
+/*
+Build in function to parse JSON string.
+Schema parameter is required.
+*/
 SELECT from_json(profile) AS profile_struct
-  FROM customers;
+FROM customers;
 
 -- COMMAND ----------
 
@@ -41,6 +48,10 @@ LIMIT 1
 
 -- COMMAND ----------
 
+/*
+It is enough to provide schema of one record.
+The result is a struct with nested fields.
+*/
 CREATE OR REPLACE TEMP VIEW parsed_customers AS
   SELECT customer_id, from_json(profile, schema_of_json('{"first_name":"Thomas","last_name":"Lane","gender":"Male","address":{"street":"06 Boulevard Victor Hugo","city":"Paris","country":"France"}}')) AS profile_struct
   FROM customers;
@@ -53,6 +64,9 @@ DESCRIBE parsed_customers
 
 -- COMMAND ----------
 
+/*
+Access to nested fields of struct type simplified.
+*/
 SELECT customer_id, profile_struct.first_name, profile_struct.address.country
 FROM parsed_customers
 
@@ -76,7 +90,10 @@ FROM orders
 
 -- COMMAND ----------
 
-SELECT order_id, customer_id, explode(books) AS book 
+/*
+explode() function puts each array element into a separate row.
+*/
+SELECT order_id, customer_id, explode(books) AS book
 FROM orders
 
 -- COMMAND ----------
@@ -86,6 +103,9 @@ FROM orders
 
 -- COMMAND ----------
 
+/*
+collect_set() function groups unique elements of an array into a set by defined key.
+*/
 SELECT customer_id,
   collect_set(order_id) AS orders_set,
   collect_set(books.book_id) AS books_set
@@ -100,6 +120,10 @@ GROUP BY customer_id
 
 -- COMMAND ----------
 
+/*
+flatten() function makes a flat array of all the elements in the array of arrays.
+array_distinct() function removes duplicates from an array.
+*/
 SELECT customer_id,
   collect_set(books.book_id) As before_flatten,
   array_distinct(flatten(collect_set(books.book_id))) AS after_flatten

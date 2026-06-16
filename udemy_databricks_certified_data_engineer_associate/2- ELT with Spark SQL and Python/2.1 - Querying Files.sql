@@ -40,6 +40,10 @@ SELECT count(*) FROM json.`${dataset.bookstore}/customers-json`
 
  /*
  Metadata such as file name or create ts can be added using spark functions.
+ NOTE: file_name is not supported in newer Databricks Runtimes, use _metadata.file_path instead.
+ _metadata.file_name
+ _metadata.file_size
+ _metadata.file_modification_time
  */
  SELECT *,
     input_file_name() source_file

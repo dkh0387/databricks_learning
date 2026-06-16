@@ -10,8 +10,9 @@
 # COMMAND ----------
 
 CATALOG = "dea_learning"
+MANAGED_LOCATION = "abfss://unity-catalog-storage@dbstorageghdo4vkcqfmqq.dfs.core.windows.net/185960349365378/dea_learning"
 
-spark.sql(f"CREATE CATALOG IF NOT EXISTS {CATALOG}")
+spark.sql(f"CREATE CATALOG IF NOT EXISTS {CATALOG} MANAGED LOCATION '{MANAGED_LOCATION}'")
 for schema in ["raw", "bronze", "silver", "gold", "sec"]:
     spark.sql(f"CREATE SCHEMA IF NOT EXISTS {CATALOG}.{schema}")
 spark.sql(f"CREATE VOLUME IF NOT EXISTS {CATALOG}.raw.landing")
@@ -28,7 +29,7 @@ display(spark.sql(f"SHOW SCHEMAS IN {CATALOG}"))
 
 # COMMAND ----------
 
-REPO_PATH    = "/Workspace/Users/<your-user>/databricks_learning"   # <-- EDIT
+REPO_PATH    = "/Workspace/Users/denis.khaskin@codecentric.de/databricks_learning"   # <-- EDIT
 LANDING      = f"/Volumes/{CATALOG}/raw/landing"
 
 import os
@@ -48,3 +49,9 @@ for src, dst in mappings:
     dbutils.fs.cp(f"file:{src}", dst, recurse=False)
 
 display(dbutils.fs.ls(LANDING))
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC -- Verify raw files were copied properly
+# MAGIC SELECT * FROM read_files("dbfs:/Volumes/dea_learning/raw/landing/customers/")
