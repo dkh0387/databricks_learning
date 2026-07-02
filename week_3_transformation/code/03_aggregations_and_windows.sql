@@ -17,7 +17,7 @@ SELECT
   item.quantity * item.unit_price AS line_total,
   to_date(o.order_ts) AS order_date
 FROM   bronze.orders_bronze o
-LATERAL VIEW explode(o.items) AS item;
+LATERAL VIEW explode(from_json(items, "ARRAY<STRUCT<item_id STRING, quantity INT, unit_price DOUBLE>>")) AS item;
 
 -- COMMAND ----------
 
@@ -50,15 +50,28 @@ LIMIT 10;
 
 -- 3. Running total per customer (window)
 SELECT
-  customer_id, order_id, order_ts, order_amount,
+  customer_id,
+  order_id,
+  order_ts,
+  order_amount,
   sum(order_amount) OVER w AS running_spend,
-  row_number()      OVER w AS order_seq,
+  sum(order_amount) OVER w_total AS total_spend,
+  row_number() OVER w AS order_seq,
   lag(order_amount) OVER w AS prev_order_amount
-FROM (
-  SELECT DISTINCT order_id, customer_id, order_ts, order_amount FROM order_items
-)
-WINDOW w AS (PARTITION BY customer_id ORDER BY order_ts)
-ORDER BY customer_id, order_ts;
+FROM
+  (
+    SELECT DISTINCT
+      order_id,
+      customer_id,
+      order_ts,
+      order_amount
+    FROM
+      order_items
+  )
+WINDOW w AS (PARTITION BY customer_id ORDER BY order_ts), w_total AS (PARTITION BY customer_id)
+ORDER BY
+  customer_id,
+  order_ts;
 
 -- COMMAND ----------
 

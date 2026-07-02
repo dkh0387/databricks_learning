@@ -17,7 +17,11 @@ SELECT
   item.item_id, item.quantity, item.unit_price,
   amount AS order_amount, currency
 FROM dea_learning.bronze.orders_bronze
-LATERAL VIEW explode(items) AS item;
+LATERAL VIEW explode(from_json(items, "ARRAY<STRUCT<item_id STRING, quantity INT, unit_price DOUBLE>>")) AS item;
+
+-- COMMAND ----------
+
+select * FROM oi
 
 -- COMMAND ----------
 
@@ -54,7 +58,7 @@ FROM   i FULL OUTER JOIN oi USING (item_id);
 -- COMMAND ----------
 
 -- BROADCAST hint — items is small enough to broadcast for free
-SELECT /*+ BROADCAST(i) */ oi.order_id, oi.item_id, i.category, oi.quantity * oi.unit_price AS line_total
+SELECT /*+ BROADCAST(i)*/ oi.order_id, oi.item_id, i.category, oi.quantity * oi.unit_price AS line_total
 FROM   oi JOIN i USING (item_id);
 
 -- COMMAND ----------
@@ -86,12 +90,18 @@ ORDER BY oi.order_id, oi.item_id;
 SELECT * FROM oi WHERE order_id IN (1001, 1002) UNION
 SELECT * FROM oi WHERE order_id IN (1002, 1003);
 
+-- Deduplication
 SELECT count(*) AS rows_dedup FROM (
   SELECT * FROM oi WHERE order_id IN (1001, 1002) UNION
   SELECT * FROM oi WHERE order_id IN (1002, 1003)
 );
 
+-- Keep all
 SELECT count(*) AS rows_all FROM (
   SELECT * FROM oi WHERE order_id IN (1001, 1002) UNION ALL
   SELECT * FROM oi WHERE order_id IN (1002, 1003)
 );
+
+-- COMMAND ----------
+
+
