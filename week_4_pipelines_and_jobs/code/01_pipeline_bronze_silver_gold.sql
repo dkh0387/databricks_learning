@@ -53,8 +53,8 @@ AS SELECT *
 -- COMMAND ----------
 
 CREATE OR REFRESH STREAMING TABLE silver_customers (
-  CONSTRAINT valid_id    CHECK (customer_id IS NOT NULL) ON VIOLATION DROP ROW,
-  CONSTRAINT valid_email CHECK (email RLIKE '.+@.+\\..+') ON VIOLATION DROP ROW
+  CONSTRAINT valid_id    EXPECT (customer_id IS NOT NULL) ON VIOLATION DROP ROW,
+  CONSTRAINT valid_email EXPECT (email RLIKE '.+@.+\\..+') ON VIOLATION DROP ROW
 )
 COMMENT 'Cleansed customer dimension'
 AS SELECT
@@ -77,9 +77,9 @@ AS SELECT
 -- COMMAND ----------
 
 CREATE OR REFRESH STREAMING TABLE silver_orders (
-  CONSTRAINT positive_amount CHECK (amount > 0)                  ON VIOLATION DROP ROW,
-  CONSTRAINT valid_status    CHECK (status IN ('placed','shipped','delivered','cancelled')),
-  CONSTRAINT valid_currency  CHECK (length(currency) = 3)
+  CONSTRAINT positive_amount EXPECT (amount > 0)                  ON VIOLATION DROP ROW,
+  CONSTRAINT valid_status    EXPECT (status IN ('placed','shipped','delivered','cancelled')),
+  CONSTRAINT valid_currency  EXPECT (length(currency) = 3)
 )
 COMMENT 'Orders without line items'
 AS SELECT
@@ -96,8 +96,8 @@ AS SELECT
 -- COMMAND ----------
 
 CREATE OR REFRESH STREAMING TABLE silver_order_items (
-  CONSTRAINT valid_qty   CHECK (quantity > 0) ON VIOLATION DROP ROW,
-  CONSTRAINT valid_price CHECK (unit_price >= 0)
+  CONSTRAINT valid_qty   EXPECT (quantity > 0) ON VIOLATION DROP ROW,
+  CONSTRAINT valid_price EXPECT (unit_price >= 0)
 )
 COMMENT 'One row per line item — explode of orders.items joined to items'
 AS SELECT
@@ -111,7 +111,7 @@ AS SELECT
      item.quantity * item.unit_price AS line_total,
      o.currency
    FROM STREAM(bronze_orders) o
-   LATERAL VIEW explode(o.items) AS item;
+   LATERAL VIEW explode(from_json(o.items, 'ARRAY<STRUCT<item_id BIGINT, quantity INT, unit_price DOUBLE>>')) AS item;
 
 -- COMMAND ----------
 
@@ -148,28 +148,70 @@ AS SELECT
 
 -- NOTE on ordering: ORDER BY in a materialized view definition does NOT guarantee stored
 -- ordering — Delta storage layout is driven by clustering / Z-order. Order at query time.
-CREATE OR REFRESH MATERIALIZED VIEW gold_top_customers
-COMMENT 'Lifetime customer value ranking'
-AS SELECT
-     c.customer_id,
-     c.name,
-     c.region,
-     count(DISTINCT o.order_id) AS lifetime_orders,
-     sum(o.amount)              AS lifetime_spend
-   FROM   silver_orders o
-   JOIN   silver_customers c USING (customer_id)
-   GROUP BY c.customer_id, c.name, c.region;
+CREATE OR REFRESH MATERIALIZED VIEW gold_top_10_customers
+  COMMENT 'Lifetime customer value ranking' AS
+SELECT
+  *
+FROM
+  (
+    SELECT
+      customer_id,
+      name,
+      region,
+      lifetime_orders,
+      lifetime_spend,
+      row_number() OVER (PARTITION BY region ORDER BY lifetime_spend DESC) AS rank
+    FROM
+      (
+        SELECT
+          c.customer_id,
+          c.name,
+          c.region,
+          count(DISTINCT o.order_id) AS lifetime_orders,
+          sum(o.amount) AS lifetime_spend
+        FROM
+          silver.silver_orders o JOIN silver.silver_customers c USING (customer_id)
+        GROUP BY
+          c.customer_id,
+          c.name,
+          c.region
+      )
+  )
+WHERE
+  rank <= 10;
 
 -- COMMAND ----------
 
-CREATE OR REFRESH MATERIALIZED VIEW gold_top_items
-COMMENT 'Bestsellers by revenue'
-AS SELECT
-     oi.item_id,
-     i.name,
-     i.category,
-     sum(oi.quantity)   AS units_sold,
-     sum(oi.line_total) AS revenue
-   FROM   silver_order_items oi
-   JOIN   silver_items i USING (item_id)
-   GROUP BY oi.item_id, i.name, i.category;
+CREATE OR REFRESH MATERIALIZED VIEW gold_top_10_items
+  COMMENT 'Bestsellers by revenue' AS
+SELECT
+  *
+FROM
+  (
+    SELECT
+      item_id,
+      name,
+      category,
+      units_sold,
+      revenue,
+      row_number() OVER (PARTITION BY category ORDER BY revenue DESC) AS rank_revenue,
+      row_number() OVER (PARTITION BY category ORDER BY units_sold DESC) AS rank_units
+    FROM
+      (
+        SELECT
+          oi.item_id,
+          i.name,
+          i.category,
+          sum(oi.quantity) AS units_sold,
+          sum(oi.line_total) AS revenue
+        FROM
+          silver.silver_order_items oi JOIN silver.silver_items i USING (item_id)
+        GROUP BY
+          oi.item_id,
+          i.name,
+          i.category
+      )
+  )
+WHERE
+  rank_revenue <= 10
+  OR rank_units <= 10;
