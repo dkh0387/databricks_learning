@@ -1,9 +1,5 @@
 # Data Ingestion with Lakeflow Connect
 
-## General Architecture
-
-![General Architecture](../images/Lakeflow_Connect_Architecture.png)
-
 ## What is Lakeflow Connect?
 
 Bunch of connectors to ingest data into the Databricks Lakehouse from different sources: enterprises, cloud storage,
@@ -89,6 +85,9 @@ Ingesting data from enterprises sources: SaaS, databases, etc.
 3. `AUTO LOADER` (**incremental batch or streaming**): processes new files in either a batch or streaming manner as they
    arrive in cloud storage.
    **Ideal if:** billions of files in cloud storage, so it is built to scale.
+   **Note:** each file is read **exactly once** (tracked by path in the checkpoint) — later overwrites/modifications of
+   an already-ingested file are ignored unless `cloudFiles.allowOverwrites = true` is set.
+   See `learn_deep_dive.md` §3 for caveats.
 
     ```sql
    -- Auto Loader as a scheduled streaming table (serverless SQL — outside Spark Declarative Pipelines)
@@ -106,7 +105,7 @@ Ingesting data from enterprises sources: SaaS, databases, etc.
    .option("cloudFiles.schemaLocation", "<schema_path>")     # schema versions live here
    .load("/Volumes/catalog/schema/files")
    .writeStream
-   .option("checkpointLocation", "<checkpoint_path>")        # MUST be a different path from schemaLocation
+   .option("checkpointLocation", "<checkpoint_path>")        # may be the SAME path as schemaLocation (schemas go into a _schemas/ subdir)
    .trigger(processingTime = "1 hour")
    .toTable("catalog.database.table")
    )
@@ -125,8 +124,10 @@ See `learn_deep_dive.md` §3 for usage.
 
 #### Rescued Data Column
 
-Auto Loader adds `_rescued_data` (STRING containing JSON) by default. Captures fields missing from the schema, type
-mismatches, and case mismatches so no data is silently lost. Disable with `cloudFiles.rescuedDataColumn = ""`.
+Auto Loader adds `_rescued_data` (STRING containing JSON) by default when the schema is **inferred**; with an explicit
+schema you must opt in via the `rescuedDataColumn` option. Captures fields missing from the schema, type
+mismatches, and case mismatches so no data is silently lost. To get rid of it, drop the column with `.drop()`
+or provide an explicit schema without opting in.
 See `learn_deep_dive.md` §3 for evolution-mode interaction.
 
 #### Ingesting JSON Data

@@ -14,7 +14,7 @@ CATALOG = "dea_learning"
 
 # Start from the bronze landed by Week 2
 bronze = spark.table(f"{CATALOG}.bronze.customers_bronze")
-bronze_sql = spark.sql("SELECT * FROM {CATALOG}.bronze.customers_bronze")
+bronze_sql = spark.sql(f"SELECT * FROM {CATALOG}.bronze.customers_bronze")
 display(bronze)
 
 # COMMAND ----------

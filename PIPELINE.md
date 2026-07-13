@@ -9,7 +9,8 @@ Declarative Automation Bundle, governed by Unity Catalog.
 ```
                        SOURCE FILES (week_2_ingestion/data, week_4_…/data)
                        ┌─────────────────────────────────────────────────────┐
-                       │ customers_seed.csv          (one-shot CSV)          │
+                       │ customers_seed.csv   (static seed CSV, read         │
+                       │                       incrementally via STREAM)     │
                        │ items.csv                   (one-shot CSV)          │
                        │ orders_2026-06-0{1,2,3}.json  (continuous JSON)     │
                        │ orders_drift.json           (drift demo)            │
@@ -48,8 +49,8 @@ Declarative Automation Bundle, governed by Unity Catalog.
    ╔════════════════════════════  GOLD (BI surfaces) ═════════════════════════════╗
    ║                                                                              ║
    ║  ┌─ gold_daily_revenue ───────┐   GROUP BY order_date, region                ║
-   ║  ├─ gold_top_customers ───────┤   GROUP BY customer_id (LTV ranking)         ║
-   ║  └─ gold_top_items ───────────┘   GROUP BY item_id, category                 ║
+   ║  ├─ gold_top_10_customers ────┤   GROUP BY customer_id (LTV ranking)         ║
+   ║  └─ gold_top_10_items ────────┘   GROUP BY item_id, category                 ║
    ║                                                                              ║
    ╚════════════════════════════════════╤═════════════════════════════════════════╝
                                         │
@@ -59,6 +60,8 @@ Declarative Automation Bundle, governed by Unity Catalog.
                        │  Dashboards / SQL warehouse  →  internal BI  │
                        └──────────────────────────────────────────────┘
 ```
+
+> Naming note: the week-4 declarative pipeline creates **prefix-named** tables (`bronze_customers`, `silver_customers`), while the week-2/3 standalone tables use **suffix** naming (`customers_bronze`, `customers_silver`) — they are different artifacts. The pipeline publishes its datasets **fully qualified** into the matching layer schemas (e.g. `dea_learning.silver.silver_customers`, `dea_learning.gold.gold_daily_revenue`).
 
 ## 2. Layer-by-layer responsibilities
 
@@ -72,7 +75,7 @@ Declarative Automation Bundle, governed by Unity Catalog.
 ### Silver — "what is true"
 - One-row-per-key, conformed types, normalized strings.
 - Joins to `bronze_items` happen here when enriching line items.
-- **Expectations** enforced (`CHECK … ON VIOLATION DROP ROW` / `FAIL UPDATE`):
+- **Expectations** enforced (`CONSTRAINT <name> EXPECT (<cond>) ON VIOLATION DROP ROW` / `FAIL UPDATE`):
   - `silver_customers`: `customer_id IS NOT NULL`, `email` regex valid
   - `silver_orders`: `amount > 0`, `status` enumerated, `currency` length 3
   - `silver_order_items`: `quantity > 0`, `unit_price >= 0`
@@ -82,16 +85,16 @@ Declarative Automation Bundle, governed by Unity Catalog.
 ### Gold — "what's useful"
 - Materialized views (refresh-on-demand, cheap to query, BI-friendly).
 - `gold_daily_revenue` — daily revenue per region, primary BI dashboard surface.
-- `gold_top_customers` — LTV ranking for marketing.
-- `gold_top_items` — bestsellers by category for merchandising.
+- `gold_top_10_customers` — LTV ranking for marketing.
+- `gold_top_10_items` — bestsellers by category for merchandising.
 
 ## 3. Source → Sink summary
 
 | Source file | Bronze | Silver | Gold |
 | --- | --- | --- | --- |
-| `customers_seed.csv` | `bronze_customers` | `silver_customers` | `gold_top_customers` |
-| `items.csv` | `bronze_items` | `silver_items` | `gold_top_items` |
-| `orders_*.json` | `bronze_orders` | `silver_orders`, `silver_order_items` | `gold_daily_revenue`, `gold_top_items` |
+| `customers_seed.csv` | `bronze_customers` | `silver_customers` | `gold_top_10_customers` |
+| `items.csv` | `bronze_items` | `silver_items` | `gold_top_10_items` |
+| `orders_*.json` | `bronze_orders` | `silver_orders`, `silver_order_items` | `gold_daily_revenue`, `gold_top_10_items` |
 | `cdc/customers_cdc_events.json` | `cdc_customer_events` | `customers_scd1`, `customers_scd2` | — |
 
 ## 4. Notebook & resource map
@@ -99,10 +102,13 @@ Declarative Automation Bundle, governed by Unity Catalog.
 | File | Role |
 | --- | --- |
 | `week_2_ingestion/code/00_setup_catalog_and_seed.py` | One-time: create catalog/schemas/volume, upload data files |
+| `week_2_ingestion/code/99_reset_workspace.py` | Full reset: drop shares/recipients + `DROP CATALOG dea_learning CASCADE`; delete pipeline/job manually, then rerun setup |
 | `week_4_pipelines_and_jobs/code/01_pipeline_bronze_silver_gold.sql` | The whole declarative pipeline — bronze + silver + gold for all entities |
 | `week_4_pipelines_and_jobs/code/02_pipeline_auto_cdc_scd2.sql` | CDC pipeline — produces `customers_scd1` + `customers_scd2` |
 | `week_4_pipelines_and_jobs/code/03_lakeflow_job_definition.json` | Lakeflow Job orchestrating both pipelines, with conditional and for-each tasks |
 | `week_4_pipelines_and_jobs/code/04_query_lakeflow_system_tables.sql` | Observability queries over `system.lakeflow.*` |
+| `week_4_pipelines_and_jobs/code/06_gold_quality_audit.sql` | Saved-query source for the job's `quality_audit` SQL task — fails the task via `raise_error()` on violations |
+| `week_4_pipelines_and_jobs/code/07_region_report.py` | Per-region gold report — inner notebook of the job's `for_each_region` task (`region` = `{{input}}`) |
 | `week_5_cicd_and_troubleshooting/code/databricks.yml` | DAB packaging the pipeline + job for dev / staging / prod |
 
 ## 5. Orchestration (Lakeflow Job)
@@ -125,11 +131,17 @@ Declarative Automation Bundle, governed by Unity Catalog.
        ├──────────────────────────────────────────────────┐
        │                                                  │
        ▼                                                  ▼
-┌──────────────┐  (if/else)                  ┌────────────────────────┐
-│ weekday_audit│  day_of_week < 6 ?          │  for_each_region       │
-└──────┬───────┘                              │  region in [EU,NA,…]   │
-       │ true                                 │  → region_report (×N)  │
-       ▼                                      └────────────────────────┘
+┌──────────────────┐  (notebook task:        ┌────────────────────────┐
+│  weekday_check   │   05_weekday_check,     │  for_each_region       │
+│  sets day_of_week│   sets task value)      │  region in [EU,NA,…]   │
+└──────┬───────────┘                         │  → region_report (×N)  │
+       │                                     └────────────────────────┘
+       ▼
+┌──────────────┐  (if/else)
+│ weekday_audit│  day_of_week < 6 ?
+└──────┬───────┘
+       │ true
+       ▼
 ┌──────────────────┐
 │  quality_audit   │  SQL task on gold tables
 └──────────────────┘
@@ -186,24 +198,24 @@ Per-target catalog: `dea_learning_dev`, `dea_learning_staging`, `dea_learning` (
 Applied on top of the deployed silver/gold tables:
 
 - **Grants**: analysts → `SELECT` on gold; engineers → full control on bronze + silver; prod SP → `MODIFY` on bronze + silver; marketing user → `SELECT` on `gold.eu_daily_revenue` view only.
-- **Row filter**: `region_filter()` on `silver_customers.region` — regional teams see only their rows.
-- **Column mask**: `mask_email()` on `silver_customers.email` — only `pii_readers` see the real value.
+- **Row filter**: `region_filter()` on `customers_silver.region` (week 3's plain Delta table) — regional teams see only their rows. Pipeline-owned streaming tables like `silver_customers` would need `WITH ROW FILTER` in the pipeline definition instead of `ALTER TABLE`.
+- **Column mask**: `mask_email()` on `customers_silver.email` — only `pii_readers` see the real value.
 - **ABAC tags**: `pii=true` tagged on PII columns across the medallion so a single ABAC policy enforces masking everywhere.
-- **Delta Share**: `dea_revenue_share` publishes `gold_daily_revenue` + `gold_top_items` to partner workspaces. `silver_customers` is **never** in a share (PII).
+- **Delta Share**: `dea_revenue_share` publishes `gold_daily_revenue` + `gold_top_10_items` to partner workspaces. `silver_customers` is **never** in a share (PII).
 
 ## 9. Running it end-to-end
 
 1. `week_2_ingestion/code/00_setup_catalog_and_seed.py` — bootstrap catalog and upload data files.
-2. **Week 4 pipeline 1** — create a Spark Declarative Pipeline pointed at `01_pipeline_bronze_silver_gold.sql`. Target catalog `dea_learning`, target schema `bronze`. Run an update.
-3. **Week 4 pipeline 2** — create a second pipeline pointed at `02_pipeline_auto_cdc_scd2.sql`. Target catalog `dea_learning`, target schema `silver`. Run an update.
+2. **Week 4 pipeline 1** — create a Spark Declarative Pipeline pointed at `01_pipeline_bronze_silver_gold.sql`. Default catalog `dea_learning`, default schema `bronze`. The datasets are **fully qualified** in the SQL, so bronze/silver/gold objects land in their layer schemas regardless of the default. Run an update.
+3. **Week 4 pipeline 2** — create a second pipeline pointed at `02_pipeline_auto_cdc_scd2.sql`. Default catalog `dea_learning`, default schema `bronze`. CDC events publish to `bronze`, the SCD tables to `silver` (fully qualified). Run an update.
 4. **Week 4 job** — import `03_lakeflow_job_definition.json`, replace pipeline IDs, run it manually once.
 5. **Week 5 DAB** — copy `databricks.yml` into a bundle scaffold (`databricks bundle init`), then promote `dev → staging → prod`.
 6. **Week 6 governance** — apply the row filter + column mask + grants + ABAC tags from `week_6_governance/code/`.
 7. Inspect:
    ```sql
    SELECT * FROM dea_learning.gold.gold_daily_revenue ORDER BY order_date, region;
-   SELECT * FROM dea_learning.gold.gold_top_customers LIMIT 10;
-   SELECT * FROM dea_learning.gold.gold_top_items     LIMIT 10;
+   SELECT * FROM dea_learning.gold.gold_top_10_customers LIMIT 10;
+   SELECT * FROM dea_learning.gold.gold_top_10_items     LIMIT 10;
    ```
 
 ## 10. What this teaches for the exam

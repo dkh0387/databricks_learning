@@ -97,9 +97,10 @@ a.join(broadcast(b), "key")
 
 ```sql
 -- BROADCAST hint — items catalog is small (~15 rows), perfect to broadcast onto each order
+-- (bronze `items` is a JSON string — parse it to an array before exploding)
 SELECT /*+ BROADCAST(i) */ o.order_id, item.item_id, i.name, i.category
 FROM   dea_learning.bronze.orders_bronze o
-LATERAL VIEW explode(o.items) AS item
+LATERAL VIEW explode(from_json(o.items, 'ARRAY<STRUCT<item_id STRING, quantity INT, unit_price DOUBLE>>')) AS item
 JOIN   dea_learning.bronze.items_bronze i ON item.item_id = i.item_id;
 
 -- UNION vs UNION ALL
@@ -149,8 +150,8 @@ df.filter(col("email").rlike(".+@.+\\..+"))
 ```python
 from pyspark.sql.functions import explode, explode_outer, posexplode, col
 
-# array column "items" → one row per element. Prefer .select() over .withColumn() —
-# explode is a generator; using it in withColumn is deprecated.
+# array column "items" → one row per element. `.withColumn()` works too, but `.select()` is
+# the conventional style; explode is a generator — only one generator per projection is allowed.
 df.select("*", explode("items").alias("item"))            # drops rows with empty/null
 df.select("*", explode_outer("items").alias("item"))      # keeps them as null
 df.select(posexplode("items").alias("pos", "item"))       # returns (pos, col) pair
@@ -237,12 +238,84 @@ SELECT customer_id, order_id, amount,
 FROM silver.orders;
 ```
 
-## 6. Performance tuning — knobs you must know
+## 6. Upserts with MERGE INTO
+
+The workhorse for maintaining silver/gold **tables** — the "custom incremental logic" from the gold-layer decision
+tree below. One atomic statement that inserts, updates, and deletes on a Delta target based on a source batch
+(table, view, or subquery):
+
+```sql
+MERGE INTO dea_learning.silver.customers AS t
+USING customer_updates AS s
+  ON t.customer_id = s.customer_id
+WHEN MATCHED AND s.is_deleted THEN
+  DELETE
+WHEN MATCHED THEN
+  UPDATE SET *                          -- shorthand when source/target columns align; or SET t.col = s.col, ...
+WHEN NOT MATCHED THEN
+  INSERT *                              -- shorthand; or INSERT (cols) VALUES (s.cols)
+WHEN NOT MATCHED BY SOURCE THEN         -- optional (DBR 12.2+): target rows absent from the source
+  DELETE;
+```
+
+### Key behaviors
+
+- **Atomic**: all inserts/updates/deletes commit as one Delta transaction.
+- **Idempotent by pattern**: re-merging the same batch produces no duplicates — unlike a blind `INSERT`/append.
+  This is why downstream of re-delivering sources (e.g. `cloudFiles.allowOverwrites`, week 2) you merge, not append.
+- **Multiple-match error**: if several source rows match one target row, MERGE fails at runtime
+  (`...multiple source rows matched...`). Fix: dedup the source first with the `row_number()` pattern from §5.
+- **Clause order matters**: multiple `WHEN MATCHED` clauses are evaluated in order; every clause except the last
+  needs an `AND` condition.
+- **Insert-only MERGE** (only `WHEN NOT MATCHED THEN INSERT`) — cheap dedup ingestion for sources that re-deliver rows.
+- **Schema evolution**: `MERGE WITH SCHEMA EVOLUTION INTO ...` (DBR 15.2+) or session conf
+  `spark.databricks.delta.schema.autoMerge.enabled = true` lets the target pick up new source columns.
+
+### Python (Delta Lake API)
+
+```python
+from delta.tables import DeltaTable
+
+target = DeltaTable.forName(spark, "dea_learning.silver.customers")
+(target.alias("t")
+  .merge(updates.alias("s"), "t.customer_id = s.customer_id")
+  .whenMatchedUpdateAll()
+  .whenNotMatchedInsertAll()
+  .execute())
+```
+
+### Streaming upserts — `foreachBatch` + MERGE
+
+Structured Streaming writes are append-only; to **upsert from a stream**, run MERGE per micro-batch:
+
+```python
+def upsert_batch(batch_df, batch_id):
+    (DeltaTable.forName(spark, "dea_learning.silver.customers").alias("t")
+      .merge(batch_df.dropDuplicates(["customer_id"]).alias("s"),   # dedup within the batch first!
+             "t.customer_id = s.customer_id")
+      .whenMatchedUpdateAll()
+      .whenNotMatchedInsertAll()
+      .execute())
+
+(bronze_stream.writeStream
+  .foreachBatch(upsert_batch)
+  .option("checkpointLocation", "<checkpoint_path>")
+  .start())
+```
+
+### MERGE vs `AUTO CDC INTO` in declarative pipelines
+
+Inside Lakeflow Spark Declarative Pipelines you don't hand-write MERGE: `AUTO CDC INTO` (formerly
+`APPLY CHANGES INTO`) generates the upsert/delete logic declaratively — including out-of-order event handling
+(`SEQUENCE BY`) and SCD Type 1/2. Hand-written MERGE is for jobs/notebooks outside pipelines.
+See `../week_4_pipelines_and_jobs/learn_pipelines.md`.
+
+## 7. Performance tuning — knobs you must know
 
 | Conf | Default | Raise when | Lower when |
 | --- | --- | --- | --- |
 | `spark.sql.shuffle.partitions` | 200 | Spill on shuffle; partitions > 200 MB | Many tiny tasks; partitions < 10 MB |
-| `spark.default.parallelism` | cluster cores × 2 | RDD ops creating too few partitions | Rare — usually leave alone |
+| `spark.default.parallelism` | total executor cores (min 2) | RDD ops creating too few partitions (2–3 tasks per core is a tuning guideline, not the default) | Rare — usually leave alone |
 | `spark.sql.autoBroadcastJoinThreshold` | 10 MB | Small dim table not being broadcast | Driver OOM during broadcast |
 | `spark.executor.memory` | instance-dependent | Executor OOM, high GC time, spill | Cost > performance gain |
 | `spark.driver.memory` | instance-dependent | Driver OOM (often from `collect()`) | Cost > performance gain |
@@ -272,7 +345,7 @@ Don't guess — open the Spark UI stage page and verify max/median ratios moved 
 
 Vectorized C++ engine. Toggle at cluster level. Free speed-up on SQL/DataFrame workloads. **No benefit** on Python/Scala UDFs or RDDs. Code change: none.
 
-## 7. Gold-layer object selection
+## 8. Gold-layer object selection
 
 Four choices in Unity Catalog. Pick by **freshness need** vs **compute cost** vs **incrementality**.
 
@@ -327,16 +400,43 @@ SELECT * FROM STREAM read_files('/Volumes/dea_learning/raw/landing/orders', form
 - Views: no caching — every query re-executes the SQL.
 - Materialized view incremental refresh: **serverless only** (classic = full refresh).
 
-## 8. Data quality checks
+### Why an MV cannot be a streaming source
+
+The two mechanisms have fundamentally different data models:
+
+- **A streaming source is an append-only log.** Structured Streaming only works when the source looks like a log:
+  new rows are appended at the end, existing rows never change. The checkpoint records "read up to version/offset X",
+  the next micro-batch reads only what came after, and every row flows through **exactly once**. That is why
+  streaming tables work as sources (append-only) — and why a stream breaks when someone updates or deletes rows in
+  its source: there is no answer to "what do I do with a row I already processed that has now changed?"
+- **An MV refresh reconciles a query result.** The refresh engine (Enzyme) doesn't ask "give me the new rows" — it
+  asks "what must change in the MV so it again equals the query over the current source data?" The answer is
+  arbitrary operations: inserts, but also **updates and deletes** of existing MV rows. Example:
+  `SELECT customer, sum(amount) ... GROUP BY customer` — a new order **overwrites** that customer's existing row
+  (new sum), a refund lowers it, a deleted customer's row disappears.
+
+So the MV's own rows mutate on every refresh — it is not append-only, and a stream reading from it would immediately
+hit the changed-row problem above. That is why `readStream` on an MV is forbidden.
+
+Short version: **streaming processes rows** (each exactly once, forward-only, cannot cope with changes to old data);
+**an MV maintains a result** (reconciles target state on each refresh, therefore fine with updates/deletes in its
+sources). One is a conveyor belt, the other is a reconciliation.
+
+**Architectural consequence:** the moment an MV enters the chain, the streaming path ends there — everything
+downstream can only read batch-style (e.g. another MV on top of the MV works fine). For end-to-end streaming, all
+intermediate layers must be streaming tables; MVs belong at the end of the chain (gold/serving), where data is only
+queried, not streamed onward.
+
+## 9. Data quality checks
 
 ### In Spark Declarative Pipelines (formerly DLT)
 
 ```sql
 CREATE OR REFRESH STREAMING TABLE silver.orders (
-  CONSTRAINT valid_amount  CHECK (amount > 0),                              -- WARN
-  CONSTRAINT valid_id      CHECK (order_id IS NOT NULL) ON VIOLATION DROP ROW,
-  CONSTRAINT valid_country CHECK (country IS NOT NULL)  ON VIOLATION FAIL UPDATE
-) AS SELECT * FROM STREAM bronze.orders;
+  CONSTRAINT valid_amount  EXPECT (amount > 0),                              -- WARN
+  CONSTRAINT valid_id      EXPECT (order_id IS NOT NULL) ON VIOLATION DROP ROW,
+  CONSTRAINT valid_country EXPECT (country IS NOT NULL)  ON VIOLATION FAIL UPDATE
+) AS SELECT * FROM STREAM(bronze.orders);
 ```
 
 ```python
@@ -345,9 +445,9 @@ CREATE OR REFRESH STREAMING TABLE silver.orders (
 @dlt.expect_or_drop("valid_id", "order_id IS NOT NULL")    # DROP
 @dlt.expect_or_fail("valid_country", "country IS NOT NULL")# FAIL
 def silver_orders():
-    # For sibling pipeline tables, prefer dlt.read_stream(...) over spark.readStream.table(...)
-    # — it registers the dependency in the pipeline graph rather than going through the metastore.
-    return dlt.read_stream("bronze_orders")
+    # For sibling pipeline tables, prefer spark.readStream.table(...) — dlt.read/dlt.read_stream
+    # are legacy. Both register the dependency in the pipeline graph.
+    return spark.readStream.table("bronze_orders")
 ```
 
 Three modes:
@@ -357,9 +457,10 @@ Three modes:
 
 Inspect violations:
 ```sql
-SELECT * FROM event_log("dea_learning.pipelines.orders_pipeline")
+-- event_log() takes TABLE(<pipeline dataset>) or a pipeline ID string
+SELECT * FROM event_log(TABLE(dea_learning.silver.orders))
 WHERE event_type = 'flow_progress'
-  AND details:flow_progress:metrics:expectations IS NOT NULL;
+  AND details:flow_progress.data_quality.expectations IS NOT NULL;
 ```
 
 ### Outside pipelines — Delta table constraints
@@ -374,9 +475,12 @@ ALTER TABLE silver.orders
 
 Rejected writes fail the transaction. Use this for invariants you never want to allow.
 
-## 9. Exam-day quick reference
+## 10. Exam-day quick reference
 
-- `dropDuplicates` is non-deterministic without an `orderBy`; pair with `row_number()` window for "latest wins".
+- `dropDuplicates` keeps an arbitrary row per key — use a `row_number()` window for "latest wins".
+- `MERGE INTO` = atomic upsert (insert + update + delete in one transaction); multiple source rows matching one
+  target row → runtime error, dedup the source first.
+- Upsert from a stream: `foreachBatch` + MERGE. Inside declarative pipelines: `AUTO CDC INTO` instead of MERGE.
 - `approx_count_distinct(col, rsd)` — exam shorthand for "fast distinct count at scale".
 - Join names: `inner`, `left`, `right`, `full`, `left_semi`, `left_anti`, `cross`.
 - `UNION` deduplicates; `UNION ALL` does not (and is faster).
@@ -392,6 +496,7 @@ Rejected writes fail the transaction. Use this for invariants you never want to 
 - [DataFrame transformations (PySpark)](https://spark.apache.org/docs/latest/api/python/reference/pyspark.sql/dataframe.html)
 - [SQL built-in functions](https://docs.databricks.com/aws/en/sql/language-manual/sql-ref-functions)
 - [Joins](https://docs.databricks.com/aws/en/sql/language-manual/sql-ref-syntax-qry-select-join)
+- [MERGE INTO](https://docs.databricks.com/aws/en/sql/language-manual/delta-merge-into)
 - [Window functions](https://docs.databricks.com/aws/en/sql/language-manual/sql-ref-window-functions)
 - [Materialized views](https://docs.databricks.com/aws/en/views/materialized)
 - [Streaming tables](https://docs.databricks.com/aws/en/tables/streaming)

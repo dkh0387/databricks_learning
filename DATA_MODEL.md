@@ -45,8 +45,10 @@ Catalog `dea_learning` with five schemas:
 | `raw` | Volume holding the source files (`/Volumes/dea_learning/raw/landing/...`) |
 | `bronze` | Raw ingest tables (`customers_bronze`, `items_bronze`, `orders_bronze`) |
 | `silver` | Cleansed + conformed (`customers_silver`, `items_silver`, `orders_silver`, `order_items_silver`) |
-| `gold` | Business-ready aggregates (`gold_daily_revenue`, `gold_top_customers`, `gold_top_items`) |
+| `gold` | Business-ready aggregates (`gold_daily_revenue`, `gold_top_10_customers`, `gold_top_10_items`) |
 | `sec` | Security UDFs for row filters / column masks |
+
+> Naming note: the week-2/3 standalone tables use **suffix** naming (`customers_bronze`, `customers_silver`), while the week-4 declarative pipeline creates **prefix-named** tables (`bronze_customers`, `silver_customers`) — they are different artifacts. The pipeline publishes its datasets **fully qualified** into the matching layer schemas (e.g. `dea_learning.silver.silver_customers`).
 
 Replace `dea_learning` with any catalog name you can write to in your workspace. The sample code uses this name everywhere.
 
@@ -121,4 +123,4 @@ CREATE SCHEMA IF NOT EXISTS dea_learning.sec;
 CREATE VOLUME IF NOT EXISTS dea_learning.raw.landing;
 ```
 
-Then upload the `week_2_ingestion/data/` and `week_4_pipelines_and_jobs/data/` files into the volume — each week's first notebook contains a `dbutils.fs.cp(...)` cell that does this for you.
+Then upload the `week_2_ingestion/data/` and `week_4_pipelines_and_jobs/data/` files into the volume — `week_2_ingestion/code/00_setup_catalog_and_seed.py` contains `dbutils.fs.cp(...)` cells that do this once for all weeks.

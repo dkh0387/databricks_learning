@@ -42,7 +42,11 @@ resources:
     medallion_orders:
       name: "medallion_orders_${bundle.target}"
       catalog: ${var.catalog}
-      target: bronze    # default target schema; tables use their own where set
+      # Default schema for unqualified names. NOTE: the week-4 source SQL publishes its datasets
+      # FULLY QUALIFIED into dea_learning.bronze/silver/gold — for the dev/staging targets either
+      # strip the qualification in your src/ copies or replace the hard-coded catalog with
+      # ${var.catalog} so per-target catalogs take effect.
+      target: bronze
       libraries:
         - notebook:
             path: ./src/pipeline_bronze_silver_gold.sql

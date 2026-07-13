@@ -10,8 +10,8 @@
 | **Securable** | Any UC object that can have grants: catalog, schema, table, view, volume, function, model, external location, storage credential, connection, share. |
 | **Managed table** | UC owns metadata AND files. `DROP TABLE` removes data. Stored in catalog/schema managed location. |
 | **External table** | UC owns metadata only; data at caller-given path. `DROP TABLE` leaves data. |
-| **`SET MANAGED`** | DBR 17+ command converting an external Delta table to managed without downtime. |
-| **`UNSET MANAGED`** | Reverse — convert managed back to external. |
+| **`SET MANAGED`** | DBR 17.3 LTS+ command converting an external Delta table to managed without downtime. |
+| **`UNSET MANAGED`** | Rollback only — reverts a prior `SET MANAGED` (within 14 days) to the original external location; takes no location clause. |
 | **Volume** | UC securable for non-tabular files. Path `/Volumes/<catalog>/<schema>/<volume>/…`. |
 | **Storage credential** | UC-wrapped IAM role / managed identity used to access cloud storage. |
 | **External location** | UC binding of a cloud path to a storage credential. |
@@ -25,12 +25,12 @@
 | **`MODIFY`** | `INSERT` / `UPDATE` / `DELETE` / `MERGE` on a table. |
 | **`CREATE TABLE` / `CREATE SCHEMA` / `CREATE VOLUME` / …** | Privileges to create child objects. |
 | **`EXECUTE`** | Privilege to invoke a function or model. |
-| **`READ FILES` / `WRITE FILES`** | Privileges on external locations and volumes. |
+| **`READ FILES` / `WRITE FILES`** | Privileges on external locations only (volumes use `READ VOLUME` / `WRITE VOLUME`). |
 | **`BROWSE`** | Metadata-discovery privilege — see object exists without traverse rights. |
 | **`APPLY TAG`** | Privilege to attach governed tags. |
 | **`ALL PRIVILEGES`** | All privileges on a securable. |
 | **`GRANT` / `REVOKE`** | Standard SQL grant/revoke of UC privileges. |
-| **`DENY`** | Hard override — beats any grant, even inherited via group membership. |
+| **`DENY`** | **Not supported in UC** (GRANT/REVOKE only) — exists only in legacy Hive-metastore table ACLs. Classic exam distractor. |
 | **Ownership** | Securable owner has implicit management rights. Transfer with `ALTER … OWNER TO`. |
 | **Row filter** | SQL UDF returning BOOLEAN — rows where false are dropped. Attached via `ALTER TABLE … SET ROW FILTER`. |
 | **Column mask** | SQL UDF transforming a value at read time. Attached via `ALTER TABLE … ALTER COLUMN … SET MASK`. |

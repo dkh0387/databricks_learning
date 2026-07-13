@@ -17,30 +17,30 @@
 
 ### Temp view
 
-- Definition
-- Scope
-- Purpose
+- Definition: a named stored query (no data persisted), computed at query time
+- Scope: current Spark session only; dropped when the session ends; not registered in the catalog
+- Purpose: intermediate results within a notebook/session without cataloging anything
 
 ### Global temp view
 
-- Definition
-- Scope
-- Purpose
+- Definition: a temp view registered in the `global_temp` schema (query as `global_temp.<name>`)
+- Scope: all sessions on the same cluster; dropped when the cluster terminates
+- Purpose: share intermediate results across notebooks/sessions on one cluster
 
 ### Materialized view
 
-- Definition
-- Scope
-- Purpose
+- Definition: a view whose results are precomputed and stored physically, refreshed (incrementally where possible) rather than recomputed per query
+- Scope: persistent Unity Catalog object, available across sessions and clusters
+- Purpose: cheap, fast repeated reads — typical gold-layer/BI surface
 
 ## Delta Lakehouse features
 
 - DESCRIBE (DATABASE) EXTENDED
 - VERSION and RESTORE
 - VACUUM
-- read_file()
+- read_files()
 - _metadata
-- _rescue_columns
+- _rescued_data
 - MERGE INTO USING
 - JOIN
 - UNION
@@ -51,12 +51,12 @@
 
 - Working with JSON:
 
-  - Native access using ::
-  - from_json(, data, schema)
+  - Native access using `:` (e.g. `raw:items[0].id`; `::` is casting)
+  - from_json(jsonStr, schema)
   - STRUCT field access
 
 - Transformations:
-  - expose()
+  - explode()
   - collect_set()
   - flatten()
   - array_distinct()

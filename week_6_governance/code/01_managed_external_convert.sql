@@ -3,23 +3,16 @@
 -- MAGIC # Week 6 · Managed ↔ External — applied to an `orders_archive` table
 -- MAGIC Showcases the conversion on a realistic scenario: an archive table whose files we want to keep around
 -- MAGIC after the table itself is dropped (external), and later promote into managed status without downtime.
--- MAGIC Requires DBR 17.0+ or serverless; Delta format.
+-- MAGIC Requires DBR 17.3 LTS+ or serverless; Delta format.
 
 -- COMMAND ----------
 
 USE CATALOG dea_learning;
 
--- For a clean "files outlive table" lesson, prefer an EXTERNAL volume (cloud path you own).
--- The managed-volume fallback below works for this conversion demo because the table itself
--- is external — but the volume's own UC-managed lifecycle is unrelated to the table.
--- CREATE EXTERNAL VOLUME IF NOT EXISTS dea_learning.raw.archive
---   LOCATION '<CLOUD_PATH>/archive'
---   WITH (STORAGE CREDENTIAL <STORAGE_CREDENTIAL>);
-CREATE VOLUME IF NOT EXISTS dea_learning.raw.archive;   -- fallback: managed volume
-
--- COMMAND ----------
-
--- 1. Start with an EXTERNAL Delta table pointing at the archive volume
+-- 1. Start with an EXTERNAL Delta table at a cloud path you own.
+-- The path must live under a configured UC external location (external location +
+-- storage credential set up by an admin). Table locations must NOT overlap volumes —
+-- a LOCATION under /Volumes/... is invalid.
 CREATE OR REPLACE TABLE silver.orders_archive (
   order_id   BIGINT,
   customer_id BIGINT,
@@ -27,7 +20,7 @@ CREATE OR REPLACE TABLE silver.orders_archive (
   order_ts   TIMESTAMP
 )
 USING DELTA
-LOCATION '/Volumes/dea_learning/raw/archive/orders';
+LOCATION 's3://<your-external-location-bucket>/archive/orders';
 
 INSERT INTO silver.orders_archive
 SELECT order_id, customer_id, amount, order_ts
@@ -44,9 +37,9 @@ DESCRIBE EXTENDED silver.orders_archive;     -- Type = MANAGED
 
 -- COMMAND ----------
 
--- 3. Roll back to EXTERNAL at a different location
-ALTER TABLE silver.orders_archive UNSET MANAGED
-  LOCATION '/Volumes/dea_learning/raw/archive/orders_back';
+-- 3. Roll back to EXTERNAL — no location clause: UNSET MANAGED only reverts a prior
+-- SET MANAGED (within 14 days) back to the ORIGINAL external location
+ALTER TABLE silver.orders_archive UNSET MANAGED;
 
 DESCRIBE EXTENDED silver.orders_archive;     -- Type = EXTERNAL again
 
@@ -58,13 +51,13 @@ DROP TABLE silver.orders_archive;
 -- COMMAND ----------
 
 -- MAGIC %python
--- MAGIC display(dbutils.fs.ls("/Volumes/dea_learning/raw/archive/orders_back"))
+-- MAGIC display(dbutils.fs.ls("s3://<your-external-location-bucket>/archive/orders"))
 
 -- COMMAND ----------
 
--- 5. Re-attach without re-writing data
+-- 5. Re-attach without re-writing data (path must be under a configured UC external location)
 CREATE TABLE silver.orders_archive
 USING DELTA
-LOCATION '/Volumes/dea_learning/raw/archive/orders_back';
+LOCATION 's3://<your-external-location-bucket>/archive/orders';
 
 SELECT count(*) AS recovered_rows FROM silver.orders_archive;

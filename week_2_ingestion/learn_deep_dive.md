@@ -36,8 +36,8 @@ USING DELTA;
 -- 2. Load
 COPY INTO dea_learning.bronze.orders
 FROM 's3://landing/orders/'
-FILEFORMAT = PARQUET
-FORMAT_OPTIONS ('mergeSchema' = 'true')
+FILEFORMAT = CSV
+FORMAT_OPTIONS ('header' = 'true')
 COPY_OPTIONS  ('mergeSchema' = 'true', 'force' = 'false');
 ```
 
@@ -46,18 +46,29 @@ COPY_OPTIONS  ('mergeSchema' = 'true', 'force' = 'false');
 - **Idempotent**: tracks already-loaded files in the table's commit log. Re-running skips them.
 - **`force = true`** → reprocesses every file (use for full refresh).
 - **`mergeSchema = true`** in `COPY_OPTIONS` → table evolves to accept new columns.
+- **`FORMAT_OPTIONS` vs `COPY_OPTIONS`**: format options configure how the source files are *read* (e.g. `header`,
+  `delimiter`, `inferSchema`); copy options configure the *load behavior* (`force`, `mergeSchema`).
+- **`inferSchema = true`** (CSV/JSON format option) → Spark samples the source data and derives real column types
+  (`42` → BIGINT, `19.99` → DOUBLE) instead of reading everything as STRING. Costs an extra pass over the data —
+  skip it when the typed target table already exists (`COPY INTO` casts against the target schema anyway).
 - Subset selection at load time:
   ```sql
   COPY INTO dea_learning.bronze.orders
   FROM (SELECT id, amount, ts, region FROM 's3://landing/orders/')
   FILEFORMAT = PARQUET;
   ```
-- File pattern / subset:
+- File pattern / explicit file list (`PATTERN` and `FILES` are **mutually exclusive** — pick one):
   ```sql
+  -- Glob pattern
   COPY INTO dea_learning.bronze.orders
   FROM 's3://landing/orders/'
   FILEFORMAT = JSON
-  PATTERN = '*2026-*.json'
+  PATTERN = '*2026-*.json';
+
+  -- Explicit file list
+  COPY INTO dea_learning.bronze.orders
+  FROM 's3://landing/orders/'
+  FILEFORMAT = JSON
   FILES = ('a.json', 'b.json');
   ```
 - Cannot consume schema evolution as flexibly as Auto Loader; it merges only when `mergeSchema` is set.
@@ -75,12 +86,15 @@ COPY_OPTIONS  ('mergeSchema' = 'true', 'force' = 'false');
 
 | Mode | How files are found | When to use |
 | --- | --- | --- |
-| **Directory listing** (default) | `LIST` the source path every microbatch | Few thousand files; simple to operate; works without cloud event setup |
+| **Directory listing** (default) | `LIST` the source path every microbatch | Fine into the thousands-to-tens-of-thousands of files; simple to operate; works without cloud event setup |
 | **File notification** | Cloud event service (SNS/SQS on AWS, Event Grid+Queue on Azure, Pub/Sub on GCP) pushes new-file events to a queue Auto Loader reads | Millions of files; LIST too slow / expensive; lowest latency |
 
 Switch with `cloudFiles.useNotifications = true` (Auto Loader auto-creates queues if you grant the IAM permissions).
 
-### Required options
+### Core options
+
+`cloudFiles.schemaLocation` is required only when the schema is **inferred** — with an explicit `.schema(...)` you may
+omit it. `checkpointLocation` is always required.
 
 ```python
 (spark.readStream
@@ -97,7 +111,7 @@ Switch with `cloudFiles.useNotifications = true` (Auto Loader auto-creates queue
 Triggers:
 - `processingTime="1 hour"` — micro-batch every hour (streaming).
 - `availableNow=True` — process all pending and stop (incremental batch, ideal for jobs).
-- Continuous trigger — not used in practice on Databricks.
+- `Trigger.Continuous` — **not supported** by Auto Loader.
 
 ### Schema inference
 
@@ -105,6 +119,8 @@ Samples the **first 50 GB or 1,000 files** (whichever first). Untyped formats (J
 
 Override via:
 - `cloudFiles.schemaHints = "amount DOUBLE, ts TIMESTAMP"` — force types per column.
+- `cloudFiles.inferColumnTypes = true` — infer real types from the data (Auto Loader's counterpart to the
+  `inferSchema` format option of `COPY INTO` / `read_files`; off by default to avoid type drift across files).
 - Explicit schema via `.schema(StructType(...))` — disables inference entirely.
 
 ### Schema evolution modes (`cloudFiles.schemaEvolutionMode`)
@@ -121,7 +137,8 @@ Exam trap: with `addNewColumns` the stream **does fail once**, by design — but
 
 ### Rescued data column
 
-Auto Loader always adds `_rescued_data` (STRING containing JSON) unless you disable it. It catches:
+Auto Loader adds `_rescued_data` (STRING containing JSON) by default when the schema is **inferred**; with an
+explicit schema you must opt in via the `rescuedDataColumn` option. It catches:
 - Fields present in source but absent from schema.
 - Type mismatches (`"abc"` arriving for an INT column).
 - Case mismatches.
@@ -159,6 +176,20 @@ Use `file_modification_time` for late-arriving partition tagging; `file_path` fo
 - The Auto Loader `schemaLocation` (`_schemas/` versioned schema).
 
 Both must be durable (cloud storage / UC volume), not local disk.
+
+### Overwritten / modified files
+
+By default Auto Loader processes each file **exactly once** — it tracks files by path in the checkpoint. If a source
+file is later **overwritten or modified**, the change is silently **ignored** (the path is already marked as processed).
+To re-ingest changed files, set:
+
+```python
+.option("cloudFiles.allowOverwrites", "true")
+```
+
+Caveats: works with directory-listing mode; a modified file is reprocessed **in full**, so downstream must tolerate
+duplicates (idempotent MERGE or dedup). If sources rewrite files regularly, prefer landing each change as a **new file**
+(immutable landing zone) over enabling this option.
 
 ## 4. Streaming Table syntax in Spark Declarative Pipelines
 
@@ -216,7 +247,7 @@ FROM events
 LATERAL VIEW explode(payload.items) AS item;     -- one row per item
 
 -- Easier path: bring all struct fields up one level
-SELECT payload.*, customer.* FROM events;
+SELECT payload.*, payload.customer.* FROM events;
 ```
 
 ### Useful JSON functions
@@ -244,6 +275,9 @@ Use VARIANT for highly heterogeneous JSON where you don't want to pre-define a s
 ## 6. JDBC / ODBC / REST ingestion
 
 When no managed connector exists.
+
+ODBC follows the same pattern as JDBC but targets BI tools and other external clients connecting through ODBC
+drivers; from a notebook you typically read external databases via JDBC.
 
 ### JDBC read
 
@@ -301,7 +335,7 @@ Scope creation requires admin: `databricks secrets create-scope ops`.
 
 | Source | Mode |
 | --- | --- |
-| Salesforce | CDC (managed pipeline) |
+| Salesforce | Incremental (managed pipeline) |
 | Workday | Full + incremental |
 | ServiceNow | Incremental |
 | SQL Server / PostgreSQL / MySQL / Oracle | CDC via gateway |
@@ -309,7 +343,7 @@ Scope creation requires admin: `databricks secrets create-scope ops`.
 | NetSuite | Incremental |
 | SharePoint | Incremental |
 
-Architecture (recap from `01_…lakeflow_connect.md`):
+Architecture (recap from `learn_lakeflow_connect.md`):
 
 ```
 Source DB / SaaS
@@ -323,16 +357,18 @@ You configure once; Databricks runs the pipeline, handles schema drift, retries,
 
 ## 8. Common gotchas (exam-bait)
 
-- **Auto Loader requires `cloudFiles.schemaLocation`** — leaving it out throws.
+- **Auto Loader requires `cloudFiles.schemaLocation` when the schema is inferred** (no explicit `.schema()`) — leaving it out then throws.
 - **Checkpoint and schema location are separate** — both must be durable.
 - **`addNewColumns` mode causes one failure on new column** — by design; the next run picks up the schema.
-- **`_rescued_data` is added automatically** — to disable: `cloudFiles.rescuedDataColumn = ""`.
+- **`_rescued_data` is added by default only when the schema is inferred** — with an explicit schema, opt in via
+  `rescuedDataColumn`. Don't want it? `.drop("_rescued_data")` after the read, or provide an explicit schema without opting in.
 - **`COPY INTO` is idempotent by default** — `force=true` is the override.
 - **`CREATE TABLE AS read_files()` is one-shot** — not incremental; for that use `COPY INTO` or Auto Loader.
-- **Manual file uploads land in DBFS**, not UC — for governance, ingest to a UC Volume instead.
+- **Manual file uploads**: the current upload UI targets UC volumes/tables (governed); the legacy DBFS upload is the ungoverned path — avoid it.
 - **JDBC without partitioning options = single executor** — always set them on big tables.
-- **Auto Loader `directory listing` becomes slow above ~100k files** — switch to `file notification` mode.
-- **Lakeflow Connect managed connectors are CDC by default** — schema drift handled, but source needs CDC enabled (e.g., SQL Server: enable CDC on the DB; see `../week_1_platform/learn.md` / `../README.md`).
+- **Auto Loader `directory listing` is fine into the thousands-to-tens-of-thousands of files** — switch to `file notification` mode when file counts reach the millions or listing becomes slow/expensive.
+- **Auto Loader reads each file only once** — overwritten/modified files are ignored unless `cloudFiles.allowOverwrites = true`.
+- **Lakeflow Connect managed connectors are CDC by default** — schema drift handled, but source needs CDC enabled (e.g., SQL Server: enable CDC on the DB; see `../README.md`).
 
 ## 9. Exam-day quick reference
 
@@ -341,7 +377,8 @@ You configure once; Databricks runs the pipeline, handles schema drift, retries,
 - Scaling streaming/incremental: Auto Loader (`format = cloudFiles`).
 - Schema evolution modes: `addNewColumns` (default, fails once on new col), `rescue` (capture in `_rescued_data`), `failOnNewColumns` (strict), `none` (ignore).
 - File discovery: `directory listing` (default, simple) vs `file notification` (scales to billions).
-- Auto Loader needs **`schemaLocation`** AND **`checkpointLocation`**, both durable.
+- Auto Loader needs **`checkpointLocation`** always, plus **`schemaLocation`** when the schema is inferred — both durable.
+- Exactly-once per file: changed files are skipped — re-ingest with `cloudFiles.allowOverwrites = true`.
 - Triggers: `availableNow=True` for batch drain; `processingTime="N min"` for periodic stream.
 - Metadata columns live under `_metadata.*` — use `file_path`, `file_modification_time`.
 - Managed connector → enterprise SaaS / DBs (CDC). Standard connector → cloud storage / Kafka. Partner Connect → niche.

@@ -9,7 +9,7 @@
 -- COMMAND ----------
 
 -- 1. Stream of CDC events from the landing volume
-CREATE OR REFRESH STREAMING TABLE cdc_customer_events
+CREATE OR REFRESH STREAMING TABLE dea_learning.bronze.cdc_customer_events
 COMMENT 'Raw INSERT/UPDATE/DELETE events from the source DB CDC feed'
 AS SELECT *
    FROM STREAM read_files(
@@ -21,10 +21,10 @@ AS SELECT *
 -- COMMAND ----------
 
 -- 2. Target SCD Type 1 — only the current state
-CREATE OR REFRESH STREAMING TABLE customers_scd1;
+CREATE OR REFRESH STREAMING TABLE dea_learning.silver.customers_scd1;
 
-CREATE FLOW customers_scd1_flow AS AUTO CDC INTO customers_scd1
-FROM STREAM cdc_customer_events
+CREATE FLOW customers_scd1_flow AS AUTO CDC INTO dea_learning.silver.customers_scd1
+FROM STREAM dea_learning.bronze.cdc_customer_events
 KEYS (customer_id)
 APPLY AS DELETE WHEN op = 'DELETE'
 SEQUENCE BY change_ts
@@ -34,10 +34,10 @@ STORED AS SCD TYPE 1;
 -- COMMAND ----------
 
 -- 3. Target SCD Type 2 — full change history with __START_AT / __END_AT validity windows
-CREATE OR REFRESH STREAMING TABLE customers_scd2;
+CREATE OR REFRESH STREAMING TABLE dea_learning.silver.customers_scd2;
 
-CREATE FLOW customers_scd2_flow AS AUTO CDC INTO customers_scd2
-FROM STREAM cdc_customer_events
+CREATE FLOW customers_scd2_flow AS AUTO CDC INTO dea_learning.silver.customers_scd2
+FROM STREAM dea_learning.bronze.cdc_customer_events
 KEYS (customer_id)
 APPLY AS DELETE WHEN op = 'DELETE'
 SEQUENCE BY change_ts
@@ -49,10 +49,10 @@ STORED AS SCD TYPE 2;
 -- MAGIC %md
 -- MAGIC After the update completes, query the targets:
 -- MAGIC ```sql
--- MAGIC SELECT * FROM customers_scd1 ORDER BY customer_id;
+-- MAGIC SELECT * FROM dea_learning.silver.customers_scd1 ORDER BY customer_id;
 -- MAGIC
 -- MAGIC SELECT customer_id, name, email, tier, __START_AT, __END_AT
--- MAGIC FROM   customers_scd2
+-- MAGIC FROM   dea_learning.silver.customers_scd2
 -- MAGIC WHERE  customer_id IN (13, 21, 22)
 -- MAGIC ORDER BY customer_id, __START_AT;
 -- MAGIC ```

@@ -4,7 +4,12 @@
 -- MAGIC The SQL form for incremental ingestion. Drop this notebook into a **Spark Declarative Pipeline**
 -- MAGIC and run an update.
 -- MAGIC
--- MAGIC > **Heads-up.** This notebook mirrows `04_streaming_table_sql` ETL pipeline, all `CREATE OR REFRESH STREAMING TABLE` operations could fail by running them inside the notebook due to: `The operation CREATE is not allowed: Cannot CREATE the Streaming Table `dea_learning`.`bronze`.`orders_bronze_sdp` in Serverless Generic Compute for your workspace. Enable it by enrolling in the Serverless Generic Compute Materialized View/Streaming Table workspace feature preview. If you do not see the beta feature preview available in workspace, please contact your Databricks representative. SQLSTATE: 42601`
+-- MAGIC > **Heads-up.** This notebook mirrors the Spark Declarative Pipelines (SDP) concepts, but the
+-- MAGIC > `CREATE OR REFRESH STREAMING TABLE` / `MATERIALIZED VIEW` statements may fail when run directly in a
+-- MAGIC > notebook outside a pipeline or serverless context, e.g.:
+-- MAGIC > `The operation CREATE is not allowed: Cannot CREATE the Streaming Table ... in Serverless Generic Compute
+-- MAGIC > for your workspace. Enable it by enrolling in the Serverless Generic Compute Materialized View/Streaming
+-- MAGIC > Table workspace feature preview. SQLSTATE: 42601`
 
 -- COMMAND ----------
 
@@ -25,7 +30,7 @@ AS SELECT
 -- COMMAND ----------
 
 -- 2. CUSTOMERS bronze — incremental from CSV
-CREATE OR REFRESH STREAMING TABLE dea_learning.bronze.customers_bronze
+CREATE OR REFRESH STREAMING TABLE dea_learning.bronze.customers_bronze_sdp
 COMMENT 'Raw customer snapshot from CSV seed'
 AS SELECT
      *,
@@ -40,7 +45,7 @@ AS SELECT
 -- COMMAND ----------
 
 -- 3. ITEMS bronze — small, batch refresh as a materialized view is simpler
-CREATE OR REFRESH MATERIALIZED VIEW dea_learning.bronze.items_bronze
+CREATE OR REFRESH MATERIALIZED VIEW dea_learning.bronze.items_bronze_sdp
 AS SELECT *
    FROM read_files(
      '/Volumes/dea_learning/raw/landing/items',

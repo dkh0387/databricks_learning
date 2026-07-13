@@ -15,10 +15,11 @@ USE CATALOG dea_learning;
 CREATE SHARE IF NOT EXISTS dea_revenue_share;
 
 -- 2. Add tables / schemas / views.
--- Materialized views are shared via ADD TABLE (the documented ALTER SHARE clauses are
--- ADD TABLE / ADD SCHEMA / ADD VIEW / ADD VOLUME / ADD MODEL).
-ALTER SHARE dea_revenue_share ADD TABLE gold.gold_daily_revenue;
-ALTER SHARE dea_revenue_share ADD TABLE gold.gold_top_items;
+-- Materialized views are shared via the dedicated ADD MATERIALIZED VIEW clause
+-- (the documented ALTER SHARE clauses are ADD TABLE / ADD SCHEMA / ADD VIEW /
+-- ADD MATERIALIZED VIEW / ADD VOLUME / ADD MODEL).
+ALTER SHARE dea_revenue_share ADD MATERIALIZED VIEW gold.gold_daily_revenue;
+ALTER SHARE dea_revenue_share ADD MATERIALIZED VIEW gold.gold_top_10_items;
 -- Do NOT share silver.silver_customers — contains PII.
 
 DESCRIBE SHARE dea_revenue_share;
@@ -70,8 +71,8 @@ LIMIT 50;
 
 -- MAGIC %md
 -- MAGIC ### Caveats
--- MAGIC * Recipients **cannot** see row filters / column masks attached to shared tables — enforce them at the source via a view.
+-- MAGIC * Tables with row filters / column masks **cannot be added to a share** at all — share a view that applies the same logic instead.
 -- MAGIC * Sharing is **read-only**.
 -- MAGIC * Delta format only (Parquet for open clients).
 -- MAGIC * Streaming tables are not directly shareable — share a normal table or materialized view instead.
--- MAGIC * In our pipeline, `gold_daily_revenue` and `gold_top_items` are materialized views, which **are** shareable.
+-- MAGIC * In our pipeline, `gold_daily_revenue` and `gold_top_10_items` are materialized views, which **are** shareable (via `ADD MATERIALIZED VIEW`).

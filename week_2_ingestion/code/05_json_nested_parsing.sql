@@ -14,6 +14,7 @@ LIMIT 5;
 -- COMMAND ----------
 
 -- 2. Explode the items array → one row per line item (this is what silver does)
+-- read_files infers real types (unlike Auto Loader), so items is already ARRAY<STRUCT<...>> — no from_json needed.
 SELECT
   order_id,
   customer_id,

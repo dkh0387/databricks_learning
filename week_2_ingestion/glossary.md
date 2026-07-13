@@ -17,8 +17,8 @@
 | **`COPY_OPTIONS`** | `COPY INTO` behavior knobs — `mergeSchema`, `force`. |
 | **Auto Loader** | Streaming/incremental file-ingest source identified by `format("cloudFiles")`. Scales to billions of files. |
 | **`cloudFiles.schemaLocation`** | Durable path Auto Loader uses to version the inferred schema. |
-| **`checkpointLocation`** | Durable path Spark Structured Streaming uses to track committed offsets. MUST differ from schemaLocation. |
-| **Directory listing mode** | Auto Loader default — lists the source directory each microbatch. Simple, OK up to ~100k files. |
+| **`checkpointLocation`** | Durable path Spark Structured Streaming uses to track committed offsets. May be the same directory as `schemaLocation` (Auto Loader writes schemas to a `_schemas/` subdir). |
+| **Directory listing mode** | Auto Loader default — lists the source directory each microbatch. Simple; fine into the thousands-to-tens-of-thousands of files (switch to file notification when counts reach the millions or listing gets slow/expensive). |
 | **File notification mode** | Auto Loader scaled mode — uses cloud event service (SNS/SQS, Event Grid, Pub/Sub) to discover new files. |
 | **Schema inference** | Auto Loader sampling the first 50 GB or 1,000 files to infer schema. JSON/CSV/XML default to STRING types. |
 | **Schema hints** | `cloudFiles.schemaHints` override inferred types per column. |

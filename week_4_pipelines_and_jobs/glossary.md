@@ -8,7 +8,7 @@
 | **DAG** | Directed acyclic graph of task dependencies. |
 | **Job cluster** | Ephemeral cluster created per job run; billed at Jobs Compute DBU. |
 | **Shared cluster across tasks** | One job cluster reused by multiple tasks in the same job. |
-| **Run-if conditional task** | Task that runs based on upstream outcome (`all_succeeded`, `at_least_one_succeeded`, `none_failed`, …). |
+| **Run-if conditional task** | Task that runs based on upstream outcome: All succeeded, At least one succeeded, None failed, All done, At least one failed, All failed (API: `ALL_SUCCESS`, `AT_LEAST_ONE_SUCCESS`, `NONE_FAILED`, `ALL_DONE`, `AT_LEAST_ONE_FAILED`, `ALL_FAILED`). |
 | **If/Else task** | Boolean branch in the DAG (comparison operators on parameters or task outputs). |
 | **For-each task** | Iterates over an input array, runs an inner task per element; iterations can be parallel. |
 | **Trigger** | Rule that fires a job: scheduled (cron), file arrival, table update, continuous, manual. |
@@ -21,12 +21,12 @@
 | **`system.lakeflow`** | Built-in UC schema with `jobs`, `job_tasks`, `job_run_timeline`, `job_task_run_timeline`, `pipelines`. |
 | **Spark UI** | Per-cluster UI exposing stages, tasks, executors, storage, SQL plans. |
 | **Lakeflow Spark Declarative Pipelines (SDP)** | Framework for declarative batch/streaming ETL in SQL or Python. (Formerly Delta Live Tables / DLT.) |
-| **Streaming table** | Append-only Delta table inside an SDP, fed by a streaming source. |
+| **Streaming table** | Delta table inside an SDP, fed incrementally from an append-only streaming source; can be updated by AUTO CDC flows. |
 | **Materialized view** | Persisted query result inside an SDP; recomputed on refresh. |
 | **Pipeline view** | Saved query inside an SDP — not stored, recomputed each query. |
 | **Triggered pipeline** | Pipeline runs once and stops — ideal for scheduled batch refreshes. |
 | **Continuous pipeline** | Pipeline runs forever — ideal for streaming. |
-| **Event log** | Delta table of pipeline lifecycle events (`flow_progress`, `dataset_violation`, `cluster_resources`, `update_progress`). |
+| **Event log** | Delta table of pipeline lifecycle events (`flow_definition`, `flow_progress`, `update_progress`, `cluster_resources`). Expectation violations are recorded inside `flow_progress` events under `details:flow_progress.data_quality`. |
 | **Auto CDC INTO** | Current SQL syntax for applying CDC changes into a target streaming table (replaces old DLT `APPLY CHANGES INTO`). |
 | **`KEYS`** | `AUTO CDC INTO` clause — primary keys identifying records. |
 | **`SEQUENCE BY`** | `AUTO CDC INTO` clause — column that orders changes (e.g., commit timestamp). |

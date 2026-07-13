@@ -62,8 +62,7 @@ ORDER BY timestamp DESC;
 ```
 
 Event types you must recognise:
-- `flow_progress` — start/complete/fail of a flow.
-- `dataset_violation` — expectation violation rows.
+- `flow_progress` — start/complete/fail of a flow; expectation metrics live inside these events (`details:flow_progress.data_quality`).
 - `cluster_resources` — cluster scaling events.
 - `update_progress` — pipeline lifecycle.
 
@@ -248,17 +247,16 @@ spark.conf.set("spark.sql.shuffle.partitions", 400)
 # Broadcast join threshold (bytes) — default 10 MB
 spark.conf.set("spark.sql.autoBroadcastJoinThreshold", 50 * 1024 * 1024)
 spark.conf.set("spark.sql.autoBroadcastJoinThreshold", -1)   # disable broadcast joins
-
-# Default parallelism — used by RDD operations without partition hints
-spark.conf.set("spark.default.parallelism", 200)
 ```
 
-Executor / driver memory cannot be set at runtime — configure in the cluster UI under
+Executor / driver memory and `spark.default.parallelism` (used by RDD operations without
+partition hints) cannot be set at runtime — configure them in the cluster UI under
 **Compute → cluster → Advanced options → Spark → Spark config**, one `key value` per line:
 
 ```
-spark.executor.memory 14g
-spark.driver.memory   14g
+spark.executor.memory     14g
+spark.driver.memory       14g
+spark.default.parallelism 200
 ```
 
 When to tune what:

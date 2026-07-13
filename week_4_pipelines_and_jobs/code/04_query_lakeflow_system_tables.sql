@@ -43,6 +43,7 @@ SELECT job_id,
        sum(CASE WHEN result_state = 'FAILED' THEN 1 ELSE 0 END) * 1.0 / count(*) AS fail_rate
 FROM   system.lakeflow.job_run_timeline
 WHERE  period_start_time > current_date() - INTERVAL 30 DAYS
+  AND  result_state IS NOT NULL   -- only finished runs; non-terminal rows have NULL result_state
 GROUP BY job_id
 HAVING fail_rate > 0
 ORDER BY fail_rate DESC;

@@ -14,12 +14,16 @@
       complex queries. Unlike a view, it is physically stored.
       SQL: `CREATE OR REFRESH MATERIALIZED VIEW xyz AS SELECT * FROM table_xyz` (`REFRESH` guarantees the view stays
       up to date). Incremental refresh requires **serverless** compute.
+      An MV **cannot be a streaming source**: its refresh reconciles a query result, so existing rows are updated or
+      deleted — the table is not append-only, which streaming requires. Consequence: an MV ends the streaming path;
+      keep intermediate layers as streaming tables and place MVs at the end of the chain (gold/serving).
+      Why in depth: `../week_3_transformation/learn_data_transformation.md` §8.
     - View: a saved query. Any time the query is executed, the latest data is returned.
       Views cannot be used as a streaming source.
       There are two kinds: temporary (lifetime within the pipeline, not exposed to any catalog) and normal (exposed to
       the catalog).
-      SQL: `CREATE OR REPLACE VIEW xyz AS SELECT * FROM table_xyz` (add the optional `TEMPORARY` keyword between
-      `REPLACE` and `VIEW` to get the pipeline-scoped form)
+      SQL: `CREATE TEMPORARY VIEW xyz AS SELECT * FROM table_xyz` for the pipeline-scoped form (not published),
+      or `CREATE VIEW xyz AS SELECT * FROM table_xyz` to publish the view to the catalog
 
 ## Advantages
 
@@ -59,9 +63,9 @@
 - We can add constraints to the SQLs to ensure data quality or apply filters (example on the unified orders domain):
   ```sql
   CREATE OR REFRESH STREAMING TABLE silver_orders
-  (CONSTRAINT positive_amount CHECK (amount > 0)                  ON VIOLATION DROP ROW,
-   CONSTRAINT valid_status    CHECK (status IN ('placed','shipped','delivered','cancelled')),
-   CONSTRAINT valid_currency  CHECK (length(currency) = 3)        ON VIOLATION FAIL UPDATE) AS
+  (CONSTRAINT positive_amount EXPECT (amount > 0)                  ON VIOLATION DROP ROW,
+   CONSTRAINT valid_status    EXPECT (status IN ('placed','shipped','delivered','cancelled')),
+   CONSTRAINT valid_currency  EXPECT (length(currency) = 3)        ON VIOLATION FAIL UPDATE) AS
   SELECT * FROM STREAM(bronze_orders)
   ```
 
@@ -69,12 +73,12 @@
   @dlt.table()
   @dlt.expect("positive_amount", "amount > 0")
   def silver_orders():
-    # For sibling pipeline tables, prefer dlt.read_stream over spark.readStream.table
-    # so the dependency is registered in the pipeline graph.
-    return dlt.read_stream("bronze_orders")
+    # dlt.read / dlt.read_stream are legacy; the current recommendation for sibling
+    # pipeline tables is spark.read.table / spark.readStream.table.
+    return spark.readStream.table("bronze_orders")
   ```
 - As we see in the code, we can use:
-    - warnings to notice violations but let data throw
+    - warnings to notice violations but let data through
     - drops row to remove the offending row
     - fails to stop the pipeline and notify the user about the violation
 
@@ -101,8 +105,9 @@
         * Pipeline progress: status of each run
         * Data lineage: how data flows through the pipeline
     - Event Log is a Delta Table and can be queried using SQL:
-        * Publish: select "publish Event Log to metastore" in the advanced section of the pipeline configuration
-        * Query: `SELECT * FROM <catalog>.<schema>.<event_log_table_name>`
+        * Via the table-valued function: `SELECT * FROM event_log("<pipeline-id>")`
+        * Or via the published table in the pipeline's default catalog/schema, named
+          `event_log_<pipeline_id_with_underscores>`
 
 ## Change Data Capture (CDC)
 

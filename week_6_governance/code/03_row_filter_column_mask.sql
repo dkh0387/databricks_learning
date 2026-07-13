@@ -1,10 +1,14 @@
 -- Databricks notebook source
 -- MAGIC %md
--- MAGIC # Week 6 · Row filters and column masks on `silver_customers`
+-- MAGIC # Week 6 · Row filters and column masks on `customers_silver`
 -- MAGIC * Row filter by `region` — each regional team sees only their customers.
 -- MAGIC * Column mask on `email` — only `pii_readers` see the real address.
 -- MAGIC
 -- MAGIC Manual per-table approach. For account-wide rules see `04_abac_tagging.sql`.
+-- MAGIC
+-- MAGIC We use week 3's plain Delta table `dea_learning.silver.customers_silver`. On
+-- MAGIC pipeline-managed streaming tables / MVs (like week 4's `silver_customers`), row
+-- MAGIC filters/masks must be declared in the pipeline definition (`WITH ROW FILTER`), not via `ALTER TABLE`.
 
 -- COMMAND ----------
 
@@ -13,7 +17,9 @@ USE CATALOG dea_learning;
 -- COMMAND ----------
 
 -- 1. Row filter — admins see everything; regional teams only their region; everyone else nothing.
--- Covers every region the Week 3 silver_customers cleansing produces: EU, NA, APAC, LATAM, EMEA, OTHER.
+-- Covers every region the cleansing derives: EU, NA, APAC, LATAM, EMEA, OTHER.
+-- Two artifacts carry this mapping: week 3 writes the plain Delta table `customers_silver`
+-- (used here); week 4's pipeline owns the streaming table `silver_customers`.
 CREATE OR REPLACE FUNCTION sec.region_filter(region STRING)
 RETURNS BOOLEAN
 RETURN
@@ -25,13 +31,13 @@ RETURN
   OR (IS_ACCOUNT_GROUP_MEMBER('emea_team')  AND region = 'EMEA');
   -- 'OTHER' is admin-only by design (no team owns it).
 
-ALTER TABLE silver.silver_customers
+ALTER TABLE silver.customers_silver
   SET ROW FILTER sec.region_filter ON (region);
 
 -- COMMAND ----------
 
 -- Verify — you should only see rows for the regions your group can access
-SELECT * FROM silver.silver_customers ORDER BY customer_id;
+SELECT * FROM silver.customers_silver ORDER BY customer_id;
 
 -- COMMAND ----------
 
@@ -44,15 +50,15 @@ RETURN
     ELSE regexp_replace(email, '(^.)(.*)(@.*$)', '$1***$3')
   END;
 
-ALTER TABLE silver.silver_customers
+ALTER TABLE silver.customers_silver
   ALTER COLUMN email SET MASK sec.mask_email;
 
 -- COMMAND ----------
 
-SELECT customer_id, name, email, region FROM silver.silver_customers ORDER BY customer_id;
+SELECT customer_id, name, email, region FROM silver.customers_silver ORDER BY customer_id;
 
 -- COMMAND ----------
 
 -- Cleanup (uncomment to remove)
--- ALTER TABLE silver.silver_customers DROP ROW FILTER;
--- ALTER TABLE silver.silver_customers ALTER COLUMN email DROP MASK;
+-- ALTER TABLE silver.customers_silver DROP ROW FILTER;
+-- ALTER TABLE silver.customers_silver ALTER COLUMN email DROP MASK;

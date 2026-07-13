@@ -32,7 +32,8 @@ databricks bundle validate -t prod
 databricks bundle deploy   -t prod
 
 # 8. Adopt an existing UI-built job into the bundle ------------------------
-databricks bundle generate job --existing-job-id 12345 > resources/imported_job.yml
+# generate writes the YAML file itself (-d sets the resources dir, -s the src dir)
+databricks bundle generate job --existing-job-id 12345 -d resources
 databricks bundle deployment bind imported_job 12345 -t dev
 
 # 9. Tear down a target (destructive!) -------------------------------------

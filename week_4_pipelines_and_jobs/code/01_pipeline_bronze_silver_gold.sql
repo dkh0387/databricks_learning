@@ -6,8 +6,12 @@
 -- MAGIC * **Silver** — cleansed, deduplicated, line items exploded, expectations enforced.
 -- MAGIC * **Gold** — business aggregates ready for BI.
 -- MAGIC
--- MAGIC Create a new pipeline in the UI (*New ETL pipeline*), point it at this notebook, set the target catalog to
--- MAGIC `dea_learning`, and run an update.
+-- MAGIC Create a new pipeline in the UI (*New ETL pipeline*), point it at this notebook, set the default catalog to
+-- MAGIC `dea_learning` (default schema: `bronze`), and run an update.
+-- MAGIC
+-- MAGIC All datasets are **fully qualified** (`dea_learning.bronze/silver/gold.*`) so each lands in its layer schema —
+-- MAGIC the pipeline's default catalog/schema only catches unqualified names. The layer prefix in the dataset names is
+-- MAGIC kept on purpose so unqualified mentions across the docs stay unambiguous.
 
 -- COMMAND ----------
 
@@ -16,7 +20,7 @@
 
 -- COMMAND ----------
 
-CREATE OR REFRESH STREAMING TABLE bronze_orders
+CREATE OR REFRESH STREAMING TABLE dea_learning.bronze.bronze_orders
 COMMENT 'Raw orders — one row per order with a nested items array'
 AS SELECT *,
           _metadata.file_path AS source_file
@@ -26,7 +30,7 @@ AS SELECT *,
      schemaHints   => 'order_id BIGINT, customer_id BIGINT, amount DOUBLE, order_ts TIMESTAMP'
    );
 
-CREATE OR REFRESH STREAMING TABLE bronze_customers
+CREATE OR REFRESH STREAMING TABLE dea_learning.bronze.bronze_customers
 COMMENT 'Raw customer rows from CSV seed'
 AS SELECT *
    FROM STREAM read_files(
@@ -36,7 +40,7 @@ AS SELECT *
      schemaHints  => 'customer_id BIGINT, signup_date DATE'
    );
 
-CREATE OR REFRESH MATERIALIZED VIEW bronze_items
+CREATE OR REFRESH MATERIALIZED VIEW dea_learning.bronze.bronze_items
 COMMENT 'Item catalog — small, batch-refreshed'
 AS SELECT *
    FROM read_files(
@@ -52,7 +56,7 @@ AS SELECT *
 
 -- COMMAND ----------
 
-CREATE OR REFRESH STREAMING TABLE silver_customers (
+CREATE OR REFRESH STREAMING TABLE dea_learning.silver.silver_customers (
   CONSTRAINT valid_id    EXPECT (customer_id IS NOT NULL) ON VIOLATION DROP ROW,
   CONSTRAINT valid_email EXPECT (email RLIKE '.+@.+\\..+') ON VIOLATION DROP ROW
 )
@@ -72,11 +76,11 @@ AS SELECT
      END                                        AS region,
      to_date(signup_date)                       AS signup_date,
      tier
-   FROM STREAM(bronze_customers);
+   FROM STREAM(dea_learning.bronze.bronze_customers);
 
 -- COMMAND ----------
 
-CREATE OR REFRESH STREAMING TABLE silver_orders (
+CREATE OR REFRESH STREAMING TABLE dea_learning.silver.silver_orders (
   CONSTRAINT positive_amount EXPECT (amount > 0)                  ON VIOLATION DROP ROW,
   CONSTRAINT valid_status    EXPECT (status IN ('placed','shipped','delivered','cancelled')),
   CONSTRAINT valid_currency  EXPECT (length(currency) = 3)
@@ -91,11 +95,11 @@ AS SELECT
      upper(currency)   AS currency,
      amount,
      coalesce(discount_amount, 0.0) AS discount_amount
-   FROM STREAM(bronze_orders);
+   FROM STREAM(dea_learning.bronze.bronze_orders);
 
 -- COMMAND ----------
 
-CREATE OR REFRESH STREAMING TABLE silver_order_items (
+CREATE OR REFRESH STREAMING TABLE dea_learning.silver.silver_order_items (
   CONSTRAINT valid_qty   EXPECT (quantity > 0) ON VIOLATION DROP ROW,
   CONSTRAINT valid_price EXPECT (unit_price >= 0)
 )
@@ -110,12 +114,12 @@ AS SELECT
      item.unit_price,
      item.quantity * item.unit_price AS line_total,
      o.currency
-   FROM STREAM(bronze_orders) o
+   FROM STREAM(dea_learning.bronze.bronze_orders) o
    LATERAL VIEW explode(from_json(o.items, 'ARRAY<STRUCT<item_id BIGINT, quantity INT, unit_price DOUBLE>>')) AS item;
 
 -- COMMAND ----------
 
-CREATE OR REFRESH MATERIALIZED VIEW silver_items
+CREATE OR REFRESH MATERIALIZED VIEW dea_learning.silver.silver_items
 COMMENT 'Cleansed item catalog'
 AS SELECT
      item_id,
@@ -123,7 +127,7 @@ AS SELECT
      lower(category)     AS category,
      price,
      in_stock
-   FROM bronze_items;
+   FROM dea_learning.bronze.bronze_items;
 
 -- COMMAND ----------
 
@@ -132,7 +136,7 @@ AS SELECT
 
 -- COMMAND ----------
 
-CREATE OR REFRESH MATERIALIZED VIEW gold_daily_revenue
+CREATE OR REFRESH MATERIALIZED VIEW dea_learning.gold.gold_daily_revenue
 COMMENT 'Daily revenue by region — primary BI surface'
 AS SELECT
      o.order_date,
@@ -140,15 +144,15 @@ AS SELECT
      count(DISTINCT o.order_id) AS orders,
      sum(o.amount)              AS revenue,
      avg(o.amount)              AS avg_order_amount
-   FROM   silver_orders o
-   JOIN   silver_customers c USING (customer_id)
+   FROM   dea_learning.silver.silver_orders o
+   JOIN   dea_learning.silver.silver_customers c USING (customer_id)
    GROUP BY o.order_date, c.region;
 
 -- COMMAND ----------
 
 -- NOTE on ordering: ORDER BY in a materialized view definition does NOT guarantee stored
 -- ordering — Delta storage layout is driven by clustering / Z-order. Order at query time.
-CREATE OR REFRESH MATERIALIZED VIEW gold_top_10_customers
+CREATE OR REFRESH MATERIALIZED VIEW dea_learning.gold.gold_top_10_customers
   COMMENT 'Lifetime customer value ranking' AS
 SELECT
   *
@@ -170,7 +174,7 @@ FROM
           count(DISTINCT o.order_id) AS lifetime_orders,
           sum(o.amount) AS lifetime_spend
         FROM
-          silver.silver_orders o JOIN silver.silver_customers c USING (customer_id)
+          dea_learning.silver.silver_orders o JOIN dea_learning.silver.silver_customers c USING (customer_id)
         GROUP BY
           c.customer_id,
           c.name,
@@ -182,7 +186,7 @@ WHERE
 
 -- COMMAND ----------
 
-CREATE OR REFRESH MATERIALIZED VIEW gold_top_10_items
+CREATE OR REFRESH MATERIALIZED VIEW dea_learning.gold.gold_top_10_items
   COMMENT 'Bestsellers by revenue' AS
 SELECT
   *
@@ -205,7 +209,7 @@ FROM
           sum(oi.quantity) AS units_sold,
           sum(oi.line_total) AS revenue
         FROM
-          silver.silver_order_items oi JOIN silver.silver_items i USING (item_id)
+          dea_learning.silver.silver_order_items oi JOIN dea_learning.silver.silver_items i USING (item_id)
         GROUP BY
           oi.item_id,
           i.name,

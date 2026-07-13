@@ -1,6 +1,6 @@
 -- Databricks notebook source
 -- MAGIC %md
--- MAGIC # Week 6 · GRANT / REVOKE / DENY on the medallion catalog
+-- MAGIC # Week 6 · GRANT / REVOKE on the medallion catalog
 -- MAGIC Three-level traversal rule: a user needs `USE CATALOG` + `USE SCHEMA` + a leaf privilege to read a table.
 
 -- COMMAND ----------
@@ -18,8 +18,6 @@ USE CATALOG dea_learning;
 -- GRANT USE CATALOG ON CATALOG dea_learning           TO `analysts`;
 -- GRANT USE SCHEMA  ON SCHEMA  dea_learning.gold      TO `analysts`;
 -- GRANT SELECT      ON SCHEMA  dea_learning.gold      TO `analysts`;   -- cascades to all objects
--- Per-object alternative (HMS-era syntax, still accepted):
--- GRANT SELECT      ON ALL TABLES IN SCHEMA dea_learning.gold TO `analysts`;
 
 -- COMMAND ----------
 
@@ -28,16 +26,16 @@ USE CATALOG dea_learning;
 -- GRANT ALL PRIVILEGES ON SCHEMA dea_learning.silver TO `data_engineers`;
 -- GRANT USE CATALOG    ON CATALOG dea_learning       TO `data_engineers`;
 -- GRANT USE SCHEMA     ON SCHEMA  dea_learning.gold  TO `data_engineers`;
--- GRANT SELECT          ON ALL TABLES IN SCHEMA dea_learning.gold TO `data_engineers`;
+-- GRANT SELECT         ON SCHEMA  dea_learning.gold  TO `data_engineers`;   -- inherits to all tables
 
 -- COMMAND ----------
 
 -- 3. Prod service principal: write on bronze + silver only
--- GRANT USE CATALOG ON CATALOG dea_learning             TO `prod-deployer-sp`;
+-- GRANT USE CATALOG ON CATALOG dea_learning            TO `prod-deployer-sp`;
 -- GRANT USE SCHEMA  ON SCHEMA  dea_learning.bronze     TO `prod-deployer-sp`;
--- GRANT MODIFY ON ALL TABLES IN SCHEMA dea_learning.bronze TO `prod-deployer-sp`;
+-- GRANT MODIFY      ON SCHEMA  dea_learning.bronze     TO `prod-deployer-sp`;   -- inherits to all tables
 -- GRANT USE SCHEMA  ON SCHEMA  dea_learning.silver     TO `prod-deployer-sp`;
--- GRANT MODIFY ON ALL TABLES IN SCHEMA dea_learning.silver TO `prod-deployer-sp`;
+-- GRANT MODIFY      ON SCHEMA  dea_learning.silver     TO `prod-deployer-sp`;
 
 -- COMMAND ----------
 
@@ -51,8 +49,8 @@ SELECT * FROM gold.gold_daily_revenue WHERE region = 'EU';
 
 -- COMMAND ----------
 
--- 5. DENY beats GRANT, including grants inherited via group membership
--- DENY SELECT ON TABLE dea_learning.silver.silver_customers TO `contractors`;
+-- 5. Exam trap: UC does NOT support DENY — that is legacy Hive metastore table ACLs.
+-- To restrict access in UC, REVOKE or simply don't grant.
 
 -- COMMAND ----------
 

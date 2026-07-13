@@ -29,12 +29,12 @@ DESCRIBE DETAIL managed_orders;     -- look at numFiles and location
 -- EXTERNAL VOLUME or an EXTERNAL LOCATION (cloud path you control). A managed volume mixes
 -- UC's volume lifecycle with the table's lifecycle and muddies the demo.
 --
--- Requires: an existing storage credential, plus a cloud path you can write to.
--- Replace <STORAGE_CREDENTIAL> and <CLOUD_PATH> below.
+-- Requires: an existing EXTERNAL LOCATION covering the path (the external location itself references a
+-- storage credential — CREATE EXTERNAL VOLUME takes no STORAGE CREDENTIAL clause).
+-- Replace <CLOUD_PATH> below with a path under that external location.
 
 -- CREATE EXTERNAL VOLUME IF NOT EXISTS dea_learning.raw.external_data
---   LOCATION '<CLOUD_PATH>/external_data'                              -- e.g. s3://my-bucket/dea_demo/external_data
---   WITH (STORAGE CREDENTIAL <STORAGE_CREDENTIAL>);
+--   LOCATION '<CLOUD_PATH>/external_data';                             -- e.g. s3://my-bucket/dea_demo/external_data
 
 CREATE OR REPLACE TABLE external_orders (id INT, amount DOUBLE)
 USING DELTA

@@ -333,15 +333,16 @@ Pre-commit: `pytest tests/` locally before `bundle deploy`.
 
 ### b) Pipeline expectations (Spark Declarative Pipelines)
 
-Already covered in `../week_3_transformation/learn.md` §8 and `../week_4_pipelines_and_jobs/learn_pipelines.md`. These run as part of the pipeline update — failed `expect_or_fail` aborts CD.
+Already covered in `../week_3_transformation/learn_data_transformation.md` §9 (Data quality checks) and `../week_4_pipelines_and_jobs/learn_pipelines.md`. These run as part of the pipeline update — failed `expect_or_fail` aborts CD.
 
 ## 6. Bind to existing UI-built resources
 
 If a job was originally created in the UI and someone wants to bring it under bundle control:
 
 ```bash
-# 1. Generate YAML from existing
-databricks bundle generate job --existing-job-id 12345 > resources/imported_job.yml
+# 1. Generate YAML from existing — the command writes the file itself
+#    (-d sets the resources dir, -s the src dir; no stdout redirect needed)
+databricks bundle generate job --existing-job-id 12345 -d resources
 
 # 2. Adopt it (bundle takes ownership without recreating)
 databricks bundle deployment bind imported_job 12345 -t prod
@@ -378,7 +379,7 @@ DATABRICKS_CLIENT_SECRET="<sp-secret>"
 - DAB root file: `databricks.yml`, one per project, at the root.
 - Top-level keys: `bundle`, `include`, `variables`, `sync`, `resources`, `targets`, `workspace`, `artifacts`, `run_as`, `permissions`.
 - Variable reference: `${var.foo}`. Override precedence: CLI > env var > target > default.
-- One target must be `default: true`.
+- At most one target may be `default: true`; it's optional — without it, pass `-t` explicitly.
 - `mode: development` → adds `[dev <user>]` prefix, pauses schedules. `mode: production` → strict, needs `run_as`.
 - Resource types in DAB: `apps`, `clusters`, `dashboards`, `experiments`, `jobs`, `models`, `model_serving_endpoints`, `pipelines`, `quality_monitors`, `registered_models` (UC), `schemas`, `secret_scopes`, `synced_database_tables`, `volumes`.
 - Core CLI: `init`, `validate`, `deploy`, `run`, `summary`, `destroy`, `sync`, `generate`, `deployment bind/unbind`.

@@ -8,15 +8,17 @@
 # MAGIC
 # MAGIC `rescue` mode keeps every row and captures the drift inside `_rescued_data`.
 # MAGIC
-# MAGIC > **Case sensitivity note.** By default Spark/Databricks does not match column names case-**insensitively**, so the
-# MAGIC > `Status` field would not land in the schema's `status` column. To make case matches
-# MAGIC > rescue, set `.option("readerCaseSensitive", "false")` in read options for this run.
+# MAGIC > **Case sensitivity note.** `readerCaseSensitive` defaults to `true`: the uppercased `Status` field does not
+# MAGIC > match the schema's `status` column, so it is **rescued** into `_rescued_data`. Setting
+# MAGIC > `.option("readerCaseSensitive", "false")` makes reads case-insensitive — `Status` then fills `status`
+# MAGIC > directly and the case-mismatch rescue is **suppressed**.
 
 # COMMAND ----------
 
-# NOTE: spark.sql.caseSensitive is not available on Serverless compute.
-# On Serverless, `Status` matches `status` case-insensitively (no rescue for case mismatch).
-# Type mismatches and unknown fields will still be rescued.
+# NOTE: spark.sql.caseSensitive governs SQL name resolution, not Auto Loader's rescue behavior.
+# Rescue case handling is controlled by the readerCaseSensitive reader option (default: true).
+# With the default, `Status` is a case mismatch against `status` and is rescued into _rescued_data,
+# alongside type mismatches and unknown fields.
 
 CATALOG = "dea_learning"
 TARGET  = f"{CATALOG}.bronze.orders_bronze_rescue"
@@ -32,7 +34,7 @@ CHECKPOINT  = f"/Volumes/{CATALOG}/raw/landing/_checkpoints/orders_rescue/checkp
    .option("cloudFiles.format", "json")
    .option("cloudFiles.schemaLocation", SCHEMA_PATH)
    .option("cloudFiles.schemaEvolutionMode", "rescue")
-   #.option("readerCaseSensitive", "false")          # <-- case-insensitive column matching
+   #.option("readerCaseSensitive", "false")          # <-- case-insensitive matching; suppresses the case-mismatch rescue
    .option("cloudFiles.schemaHints",
            "order_id BIGINT, customer_id BIGINT, amount DOUBLE, status STRING, currency STRING")
    .load(LANDING)

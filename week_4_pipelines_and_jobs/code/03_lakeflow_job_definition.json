@@ -1,5 +1,4 @@
 {
-  "_comment": "Week 4 · Lakeflow Job that orchestrates the medallion pipeline. Import via 'Workflows -> Create Job -> JSON view -> Paste'. Replace pipeline_id, warehouse_id and the user portion of the notebook paths with your workspace values.",
   "name": "dea_learning_orders_etl",
   "parameters": [
     {
@@ -10,19 +9,21 @@
   "tasks": [
     {
       "task_key": "ingest_setup",
-      "description": "Make sure the raw landing volume has the latest files",
+      "description": "Make sure the raw landing volume has the latest files. Week 4 Lakeflow Job orchestrating the medallion pipeline — import via 'Workflows -> Create Job -> JSON view -> Paste'; replace pipeline_id, warehouse_id and the user portion of the notebook paths with your workspace values.",
       "notebook_task": {
         "notebook_path": "/Workspace/Users/<your-user>/databricks_learning/week_2_ingestion/code/00_setup_catalog_and_seed",
         "source": "WORKSPACE"
       },
-      "job_cluster_key": "main"
+      "job_cluster_key": "main",
+      "max_retries": 2,
+      "min_retry_interval_millis": 60000
     },
     {
       "task_key": "medallion_pipeline",
       "description": "Bronze -> silver -> gold via the declarative pipeline",
       "depends_on": [{"task_key": "ingest_setup"}],
       "pipeline_task": {
-        "pipeline_id": "REPLACE_WITH_PIPELINE_ID"
+        "pipeline_id": "9b175a00-cec3-48fe-8369-dbcb5e44d564"
       }
     },
     {
@@ -30,7 +31,7 @@
       "description": "Apply CDC into customers_scd1 / customers_scd2",
       "depends_on": [{"task_key": "ingest_setup"}],
       "pipeline_task": {
-        "pipeline_id": "REPLACE_WITH_CDC_PIPELINE_ID"
+        "pipeline_id": "8afd2817-b1af-4385-80aa-0c008cc34a89"
       }
     },
     {
@@ -55,7 +56,7 @@
     },
     {
       "task_key": "quality_audit",
-      "description": "SQL audit over gold tables",
+      "description": "SQL audit over gold tables — save 06_gold_quality_audit.sql as a workspace query, paste its ID below",
       "depends_on": [{"task_key": "weekday_audit", "outcome": "true"}],
       "run_if": "ALL_SUCCESS",
       "sql_task": {
@@ -67,7 +68,7 @@
     },
     {
       "task_key": "for_each_region",
-      "description": "Run a downstream notebook per region. The inner notebook is a placeholder you author yourself.",
+      "description": "Run 07_region_report.py once per region ({{input}} -> region parameter).",
       "depends_on": [{"task_key": "medallion_pipeline"}],
       "for_each_task": {
         "inputs": "[\"EU\",\"NA\",\"APAC\",\"LATAM\",\"EMEA\"]",
@@ -75,7 +76,7 @@
         "task": {
           "task_key": "region_report",
           "notebook_task": {
-            "notebook_path": "/Workspace/Users/<your-user>/databricks_learning/week_4_pipelines_and_jobs/code/06_region_report",
+            "notebook_path": "/Workspace/Users/<your-user>/databricks_learning/week_4_pipelines_and_jobs/code/07_region_report",
             "source": "WORKSPACE",
             "base_parameters": {
               "region": "{{input}}"

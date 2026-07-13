@@ -10,18 +10,17 @@ USE CATALOG dea_learning;
 
 -- COMMAND ----------
 
--- 1. Column-level governed tags on every PII column in the medallion
-ALTER TABLE silver.silver_customers
+-- 1. Column-level governed tags on every PII column in the medallion.
+-- Week 3's plain Delta table `customers_silver` — on pipeline-managed streaming tables
+-- (like week 4's `silver_customers`) tags belong in the pipeline definition, not ALTER.
+ALTER TABLE silver.customers_silver
   ALTER COLUMN email   SET TAGS ('pii' = 'true', 'pii_class' = 'email');
-ALTER TABLE silver.silver_customers
+ALTER TABLE silver.customers_silver
   ALTER COLUMN name    SET TAGS ('pii' = 'true', 'pii_class' = 'name');
 
 -- 2. Table-level classification
-ALTER TABLE silver.silver_customers
+ALTER TABLE silver.customers_silver
   SET TAGS ('classification' = 'restricted', 'domain' = 'customers');
-
-ALTER TABLE silver.silver_orders
-  SET TAGS ('classification' = 'internal',   'domain' = 'orders');
 
 -- 3. Inspect tags
 SELECT * FROM system.information_schema.column_tags
@@ -48,6 +47,6 @@ WHERE  catalog_name = 'dea_learning';
 
 -- MAGIC %md
 -- MAGIC ### Row-level ABAC policy
--- MAGIC 1. Tag tables with their domain: `domain=customers`, `domain=orders` (already done above).
+-- MAGIC 1. Tag tables with their domain: `domain=customers` (already done above).
 -- MAGIC 2. Create a *Row filter* policy: when `domain=customers`, apply UDF `region_filter` on column `region`.
 -- MAGIC 3. The UDF reads the row's `region` value and decides if the caller is allowed to see it.

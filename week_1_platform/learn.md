@@ -64,6 +64,9 @@ Exam §1 explicitly tests choosing the right compute for a workload. Four option
 | **Serverless compute** (jobs / notebooks / pipelines) | Both dev and prod | Seconds | Bundled (compute + infra in one DBU rate) | Fully managed by Databricks. No cluster config. Use unless you have a hard dependency on instance type / init scripts. |
 | **SQL warehouse** (classic, pro, serverless) | SQL queries, BI dashboards | Classic: minutes · Pro/Serverless: seconds | Varies by tier | Optimized for SQL workloads. Pick **serverless SQL warehouse** for BI by default. |
 
+> Legacy note: **High Concurrency clusters** (multi-user clusters with process isolation) are a legacy option,
+> superseded by clusters with **shared access mode** and by **SQL warehouses** for concurrent SQL workloads.
+
 Decision shortcuts the exam likes:
 - "Need fast startup for an ad-hoc query by an analyst" → **Serverless SQL warehouse**.
 - "Scheduled nightly ETL job, cost-sensitive" → **Job cluster** (or serverless jobs if available).
@@ -78,7 +81,7 @@ Decision shortcuts the exam likes:
         - grouping data by column(s)
         - for each partition there is a separate .parquet file dir
         - only for low-cardinality columns (year, etc.)
-        - `CREATE TABLE tbl_name PARTITIONED BY (col_name, col_name, ...)`
+        - `CREATE TABLE tbl_name (col1 TYPE, ...) PARTITIONED BY (col_name, ...)`
     - Z-Order Index:
         - grouping data by range of values (id) without creating subfolders
         - well for high-cardinality columns

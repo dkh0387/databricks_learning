@@ -30,6 +30,8 @@ FROM (
   FROM '/Volumes/dea_learning/raw/landing/customers'
 )
 FILEFORMAT = CSV
+-- inferSchema: sample the CSV and derive real column types instead of all-STRING
+-- (costs an extra read pass; the ::BIGINT / ::DATE casts above would cover it too)
 FORMAT_OPTIONS ('header' = 'true', 'inferSchema' = 'true', 'delimiter' = ',')
 COPY_OPTIONS  ('mergeSchema' = 'false');
 

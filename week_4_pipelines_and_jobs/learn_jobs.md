@@ -10,7 +10,7 @@
    multiple tasks within complex workflows, allowing for the scheduling, optimization and management of repeatable
    processes
 
-## Lakeflow Jobs core concepts
+## Lakeflow platform components
 
 - Connectors (Lakeflow Connect)
 - Pipelines (Lakeflow Declarative Pipeline)
@@ -23,6 +23,9 @@ Everything is natively integrated in a Databricks platform. It eliminates integr
 ## Building Blocks of Lakeflow Jobs
 
 - Task: A unit of work that can be executed by a processing engine (notebook, query, script, etc.)
+    - **Task types:** notebook, SQL (query / dashboard refresh / alert), pipeline (triggers a Lakeflow Spark
+      Declarative Pipeline update), Python script/wheel, JAR, dbt, for-each, if/else condition.
+      The dashboard task refreshes an AI/BI dashboard on a SQL warehouse
 - Control flow: A way to define the order in which tasks should be executed
 - Job: A primary container for scheduling and orchestrating tasks such as data processing, ETL, analytics and ML
 - Supported languages: Python, SQL, Scala, R, Java (JAR)
@@ -46,6 +49,8 @@ Everything is natively integrated in a Databricks platform. It eliminates integr
 ## Job scheduling and triggers
 
 - **Trigger:** rule engine that determines when a job should run
+- Triggers are either **time-based** (a cron schedule fires at fixed times) or **data-driven** (file arrival or
+  table update fires when new data lands)
 - Examples:
     - Schedule: daily, weekly, monthly, etc., cron expression support
     - Event: on file upload (Azure Storage, AWS S3, Google Cloud Storage, Databricks Volumes, up to 10K files), on table
@@ -59,17 +64,24 @@ Everything is natively integrated in a Databricks platform. It eliminates integr
 ## Conditional and iterative tasks
 
 - **Run-if conditional task:** task that runs based on the outcome of the upstream task.
-  Dependency conditions: all succeeded, at least one succeeded, none failed (can skip but not fail), custom
+  Dependency conditions: All succeeded, At least one succeeded, None failed (can skip but not fail), All done,
+  At least one failed, All failed
+  (API enums: `ALL_SUCCESS`, `AT_LEAST_ONE_SUCCESS`, `NONE_FAILED`, `ALL_DONE`, `AT_LEAST_ONE_FAILED`, `ALL_FAILED`)
 - **If/Else task:** boolean conditional logic in the workflow, allows different branches of execution.
-  Boolean operators: ==, =, >, >=, <, <=.
+  Boolean operators: ==, !=, >, >=, <, <=.
   Condition: "if none of the dependencies failed and at least one executed" ensures meaningful upstream results
-- **For loop task:** the same logic is applied for multiple data partitions or parameter values.
+- **For each task:** the same logic is applied for multiple data partitions or parameter values.
   Loops over an input array and executes a task for each element as an input parameter.
   Iterations can run in parallel.
   Downstream tasks are attached to the whole loop container.
+- **Task values:** a task can pass small values downstream via `dbutils.jobs.taskValues.set/get`;
+  other tasks (e.g. an If/Else condition) reference them as `{{tasks.<task_key>.values.<key>}}`
 
 ## Handling task failures
 
+- **Automatic retries:** configured per task — `max_retries` (how many times to retry),
+  `min_retry_interval_millis` (wait between attempts), `retry_on_timeout` (whether a timed-out run is retried).
+  Retries are automatic, per-task recovery; repair is manual recovery of a failed job run
 - **Repair feature:** approach to failure recovery
     - Targeted recovery: modify only failed tasks, run only what is necessary
     - Parameter overwrite capability: overwrite parameters of failed tasks with new values

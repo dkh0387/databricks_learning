@@ -37,7 +37,8 @@ except Exception:
 
 # MAGIC %md
 # MAGIC ### Run 1 — only days 1 and 2 visible
-# MAGIC Auto Loader infers the schema (including the nested `items` array of structs), lands rows, exits cleanly.
+# MAGIC Auto Loader infers the schema; with the default `inferColumnTypes=false` the nested `items` array lands as a
+# MAGIC JSON **STRING** (hence the `from_json` in the query below). Rows land, the stream exits cleanly.
 
 # COMMAND ----------
 
@@ -45,6 +46,7 @@ except Exception:
     spark.readStream.format("cloudFiles")
     .option("cloudFiles.format", "json")
     .option("cloudFiles.schemaLocation", SCHEMA_PATH)
+    # .option("cloudFiles.useNotifications", "true")  # file notification mode — cloud event queue instead of directory listing; needs IAM permissions
     .option(
         "cloudFiles.schemaHints",
         "order_id BIGINT, customer_id BIGINT, amount DOUBLE, order_ts TIMESTAMP",

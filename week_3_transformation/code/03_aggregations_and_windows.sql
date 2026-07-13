@@ -17,7 +17,7 @@ SELECT
   item.quantity * item.unit_price AS line_total,
   to_date(o.order_ts) AS order_date
 FROM   bronze.orders_bronze o
-LATERAL VIEW explode(from_json(items, "ARRAY<STRUCT<item_id STRING, quantity INT, unit_price DOUBLE>>")) AS item;
+LATERAL VIEW explode(from_json(items, 'ARRAY<STRUCT<item_id STRING, quantity INT, unit_price DOUBLE>>')) AS item;
 
 -- COMMAND ----------
 
@@ -90,7 +90,7 @@ FROM (
 
 -- 5. Pivot — daily revenue by region.
 -- NOTE: PIVOT only surfaces explicitly named values; any region missing from the IN list is dropped.
--- The IN list below covers every region produced by silver_customers' country-to-region mapping.
+-- The IN list below covers every region produced by customers_silver's country-to-region mapping.
 SELECT *
 FROM (
   SELECT to_date(o.order_ts) AS d, c.region, o.amount

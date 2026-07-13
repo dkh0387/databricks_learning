@@ -60,28 +60,27 @@ USING DELTA
 LOCATION 's3://my-bucket/sales/orders/';
 ```
 
-### Convert between types (DBR 17.0+ or serverless, Delta only)
+### Convert between types (DBR 17.3 LTS+ or serverless, Delta only)
 
 ```sql
 -- external -> managed (recommended over CTAS: no downtime, keeps history, perms, name)
 ALTER TABLE dea_learning.silver.orders_archive_ext SET MANAGED;
 
--- managed -> external (rollback)
-ALTER TABLE dea_learning.silver.silver_orders UNSET MANAGED LOCATION 's3://bucket/path/';
+-- rollback: no location clause — only reverts a prior SET MANAGED (within 14 days)
+-- back to the original external location
+ALTER TABLE dea_learning.silver.orders_archive_ext UNSET MANAGED;
 ```
+
+Note: a dropped UC **managed** table is not immediately lost — `UNDROP TABLE` recovers it within 7 days (underlying files are cleaned up after ~30 days).
 
 ## Storage credentials and external locations
 
 Required to read/write external data through UC.
 
 ```sql
--- 1. Storage credential (admin only) wraps an IAM role / managed identity
--- AWS:
-CREATE STORAGE CREDENTIAL prod_s3_cred
-  WITH (IAM_ROLE 'arn:aws:iam::123456789012:role/databricks-uc');
--- Azure managed identity equivalent:
--- CREATE STORAGE CREDENTIAL prod_adls_cred
---   WITH (AZURE_MANAGED_IDENTITY '/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.ManagedIdentity/userAssignedIdentities/<name>');
+-- 1. Storage credential (admin only) wraps an IAM role / managed identity.
+-- There is no CREATE STORAGE CREDENTIAL SQL — create it via Catalog Explorer,
+-- the REST API, the Databricks CLI, or Terraform.
 
 -- 2. External location binds a path to a credential
 CREATE EXTERNAL LOCATION sales_landing
@@ -125,10 +124,10 @@ Access via path: `/Volumes/dea_learning/raw/landing/file.csv`.
 ### Traversal rule
 
 To read `dea_learning.silver.silver_orders` a user needs:
-`USE CATALOG` on `main` **and** `USE SCHEMA` on `dea_learning.silver` **and** `SELECT` on the table.
-Grants on the parent **do not cascade** by default — you must grant at the correct level (or use ABAC, see below).
+`USE CATALOG` on `dea_learning` **and** `USE SCHEMA` on `dea_learning.silver` **and** `SELECT` on the table.
+Privileges granted on a parent **inherit downward** — `SELECT` on a schema applies to all current *and future* tables in it — but the `USE CATALOG` / `USE SCHEMA` traversal privileges are still required to reach the object.
 
-### `GRANT` / `REVOKE` / `DENY`
+### `GRANT` / `REVOKE`
 
 ```sql
 GRANT USE CATALOG ON CATALOG dea_learning TO `analysts`;
@@ -140,8 +139,8 @@ GRANT ALL PRIVILEGES ON SCHEMA dea_learning.silver TO `data_engineers`;
 
 REVOKE SELECT ON TABLE dea_learning.silver.silver_orders FROM `analysts`;
 
--- DENY overrides any GRANT, including inherited ones via groups
-DENY SELECT ON TABLE dea_learning.silver.silver_orders TO `contractors`;
+-- UC does NOT support DENY — that is legacy Hive metastore table ACLs.
+-- To restrict access, REVOKE or simply don't grant (classic exam distractor).
 
 SHOW GRANTS ON TABLE dea_learning.silver.silver_orders;
 SHOW GRANTS `analysts` ON CATALOG dea_learning;   -- grants held by analysts inside this catalog
@@ -158,7 +157,7 @@ ALTER TABLE dea_learning.silver.silver_orders OWNER TO `data_platform_admins`;
 
 ## Row filters and column masks (manual, per-table)
 
-Both are SQL UDFs attached to a table.
+Both are SQL UDFs attached to a table. The examples below use week 3's plain Delta table `dea_learning.silver.customers_silver`. On pipeline-managed streaming tables / materialized views (like week 4's `silver_customers`), filters and masks must be declared in the pipeline definition (`WITH ROW FILTER`), not via `ALTER TABLE`.
 
 ### Row filter — drops rows based on UDF returning `FALSE`
 
@@ -170,11 +169,11 @@ RETURN
   OR (IS_ACCOUNT_GROUP_MEMBER('eu_team') AND region = 'EU')
   OR (IS_ACCOUNT_GROUP_MEMBER('us_team') AND region = 'US');
 
-ALTER TABLE dea_learning.silver.silver_orders
+ALTER TABLE dea_learning.silver.customers_silver
   SET ROW FILTER dea_learning.sec.region_filter ON (region);
 
 -- Remove
-ALTER TABLE dea_learning.silver.silver_orders DROP ROW FILTER;
+ALTER TABLE dea_learning.silver.customers_silver DROP ROW FILTER;
 ```
 
 ### Column mask — transforms a value at read time
@@ -186,14 +185,27 @@ RETURN
   CASE WHEN IS_ACCOUNT_GROUP_MEMBER('pii_readers') THEN email
        ELSE regexp_replace(email, '(^.)(.*)(@.*$)', '$1***$3') END;
 
-ALTER TABLE dea_learning.silver.silver_customers
+ALTER TABLE dea_learning.silver.customers_silver
   ALTER COLUMN email SET MASK dea_learning.sec.mask_email;
 
-ALTER TABLE dea_learning.silver.silver_customers
+ALTER TABLE dea_learning.silver.customers_silver
   ALTER COLUMN email DROP MASK;
 ```
 
 Built-in helpers: `current_user()`, `is_account_group_member(group)`, `session_user()`.
+
+### Dynamic views
+
+Row/column security without filters or masks: put `is_member()` / `is_account_group_member()` directly in a view definition, then grant on the view only.
+
+```sql
+CREATE OR REPLACE VIEW dea_learning.gold.customers_secure AS
+SELECT customer_id,
+       CASE WHEN is_account_group_member('pii_readers') THEN email ELSE '****' END AS email,
+       region
+FROM   dea_learning.silver.customers_silver
+WHERE  is_account_group_member('admins') OR region <> 'EU';
+```
 
 ## ABAC — Attribute-Based Access Control (GA 2026)
 
@@ -204,8 +216,11 @@ Apply one policy across many tables/columns by **tagging** them instead of alter
 Account-level vocabulary of `key` or `key:value` pairs. Attach to catalogs, schemas, tables, columns.
 
 ```sql
-APPLY TAG ('pii' = 'true')        ON COLUMN dea_learning.silver.silver_customers.email;
-APPLY TAG ('classification' = 'restricted') ON TABLE dea_learning.silver.silver_orders;
+-- (APPLY TAG is the *privilege* name; the DDL is ALTER ... SET TAGS)
+ALTER TABLE dea_learning.silver.customers_silver
+  ALTER COLUMN email SET TAGS ('pii' = 'true');
+ALTER TABLE dea_learning.silver.customers_silver
+  SET TAGS ('classification' = 'restricted');
 ```
 
 ### Policy components
@@ -250,6 +265,9 @@ Open protocol for read-only data sharing across orgs, clouds, regions — no dat
 CREATE SHARE finance_share;
 ALTER SHARE finance_share ADD TABLE  dea_learning.silver.silver_orders;
 ALTER SHARE finance_share ADD SCHEMA dea_learning.gold;   -- schema-level: future objects too
+-- Views and materialized views have dedicated clauses:
+-- ALTER SHARE finance_share ADD VIEW dea_learning.gold.eu_daily_revenue;
+-- ALTER SHARE finance_share ADD MATERIALIZED VIEW dea_learning.gold.gold_daily_revenue;
 CREATE RECIPIENT partner_acme USING ID 'azure:eastus:abc-123';
 GRANT SELECT ON SHARE finance_share TO RECIPIENT partner_acme;
 
@@ -263,7 +281,7 @@ Two modes:
 - **Open sharing** — recipient uses any tool implementing the open Delta Sharing protocol (pandas, Spark, BI tool).
 
 Advantages: no ETL, governed, audit-logged, live data.
-Limits: read-only, Delta/Parquet only, no row-filter/column-mask enforcement on shared tables (apply at source view).
+Limits: read-only, Delta/Parquet only; tables with row filters or column masks **cannot be added to a share** at all — share a view that applies the same logic instead.
 
 ## Common SQL drills
 
@@ -290,9 +308,9 @@ SELECT * FROM system.information_schema.table_privileges;
 
 - Three-level namespace: `catalog.schema.object`. Hive's two-level is **out**.
 - Traversal: need `USE CATALOG` + `USE SCHEMA` + leaf privilege (`SELECT`/`MODIFY`/…).
-- `DENY` beats `GRANT`. Group membership inherits, but `DENY` to a member overrides.
-- Managed table dropped → data gone. External dropped → data stays.
-- `SET MANAGED` converts external → managed without downtime (DBR 17+).
+- UC has **no `DENY`** — GRANT/REVOKE only. `DENY` exists only in legacy HMS table ACLs (exam trap).
+- Managed table dropped → data gone (but `UNDROP TABLE` recovers it within 7 days). External dropped → data stays.
+- `SET MANAGED` converts external → managed without downtime (DBR 17.3 LTS+). `UNSET MANAGED` (no location clause) rolls it back within 14 days.
 - Row filter = UDF returns `BOOLEAN`. Column mask = UDF returns same/castable type.
 - Manual filters/masks = per table. ABAC = tag once, applies everywhere.
 - `IS_ACCOUNT_GROUP_MEMBER('grp')` is the canonical check inside filter/mask UDFs.

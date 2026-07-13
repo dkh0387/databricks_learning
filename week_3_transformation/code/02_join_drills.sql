@@ -17,7 +17,7 @@ SELECT
   item.item_id, item.quantity, item.unit_price,
   amount AS order_amount, currency
 FROM dea_learning.bronze.orders_bronze
-LATERAL VIEW explode(from_json(items, "ARRAY<STRUCT<item_id STRING, quantity INT, unit_price DOUBLE>>")) AS item;
+LATERAL VIEW explode(from_json(items, 'ARRAY<STRUCT<item_id STRING, quantity INT, unit_price DOUBLE>>')) AS item;
 
 -- COMMAND ----------
 
@@ -54,6 +54,19 @@ LEFT ANTI JOIN i USING (item_id);
 -- FULL OUTER — find catalog items never ordered AND orders for unknown items
 SELECT i.item_id AS catalog_sku, oi.item_id AS order_sku, i.name
 FROM   i FULL OUTER JOIN oi USING (item_id);
+
+-- COMMAND ----------
+
+-- RIGHT — keep every catalog item even when it was never ordered (mirror of LEFT)
+SELECT 'right' AS kind, oi.order_id, i.item_id, i.name
+FROM   oi RIGHT JOIN i USING (item_id);
+
+-- COMMAND ----------
+
+-- CROSS — every customer × every catalog item (cartesian product).
+-- WARNING: result size = rows(c) × rows(i) — explodes fast; only use on tiny inputs.
+SELECT c.customer_id, i.item_id, i.name
+FROM   c CROSS JOIN i;
 
 -- COMMAND ----------
 

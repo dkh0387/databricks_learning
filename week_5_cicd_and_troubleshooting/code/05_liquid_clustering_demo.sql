@@ -23,7 +23,7 @@ CLUSTER BY (customer_id, order_date);
 
 -- COMMAND ----------
 
--- Bulk-load 200k synthetic orders from existing silver
+-- Bulk-load 200k synthetic orders generated with range()
 INSERT INTO silver.silver_orders_lc
 SELECT
   id AS order_id,

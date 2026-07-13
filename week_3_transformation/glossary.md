@@ -19,13 +19,13 @@
 | **Broadcast join** | Small right side is sent to every executor, no shuffle. Hint: `/*+ BROADCAST(t) */`. |
 | **Sort-merge join** | Default for large joins — both sides sorted+merged. |
 | **AQE** | Adaptive Query Execution — runtime re-optimization (default on). Coalesces tiny partitions, splits skewed ones. |
-| **`UNION`** | Combine two DataFrames; deduplicates. |
-| **`UNION ALL`** | Same as UNION but no dedup — faster. |
+| **`UNION`** | SQL: combine two result sets, deduplicated. PySpark `df.union()` does NOT dedup (UNION ALL semantics) — chain `.distinct()`. |
+| **`UNION ALL`** | SQL: combine without dedup — faster. Matches PySpark `df.union()` behavior. |
 | **`explode`** | Turn an array column into one row per element. Drops null/empty arrays. |
 | **`explode_outer`** | Like `explode` but keeps rows with null/empty arrays. |
 | **Window function** | Aggregation over a partition+order without grouping (`row_number()`, `lag`, `sum() OVER (PARTITION BY…)`). |
 | **`row_number()`** | Distinct rank per partition — the canonical "latest record per key" tool. |
-| **`dropDuplicates`** | Non-deterministic dedup without an orderBy. |
+| **`dropDuplicates`** | Keeps an arbitrary row per key — use a `row_number()` window for latest-wins. |
 | **`distinct`** | Dedup across all columns. |
 | **`approx_count_distinct`** | HyperLogLog approximate distinct count — fast at scale (default ~5% rel SD). |
 | **Aggregation** | `sum`, `avg`/`mean`, `min`, `max`, `count`, `countDistinct`. |
@@ -38,9 +38,12 @@
 | **Photon** | Vectorized C++ execution engine. Toggle at cluster level. Free speed-up on SQL/DataFrame; no benefit on Python/Scala UDFs or RDDs. |
 | **`coalesce` (function)** | Null-handling: returns the first non-null argument across columns — `coalesce(a, b, 0)`. |
 | **`coalesce` (DataFrame method)** | Partition operation: reduces the number of partitions without a full shuffle — `df.coalesce(8)`. |
+| **`MERGE INTO`** | Atomic upsert on a Delta table: `WHEN MATCHED UPDATE / DELETE`, `WHEN NOT MATCHED INSERT`, optional `WHEN NOT MATCHED BY SOURCE`. Fails if multiple source rows match one target row — dedup source first. |
+| **`foreachBatch`** | Streaming sink hook that runs a function per micro-batch — the way to upsert (MERGE) from a stream, since streaming writes are otherwise append-only. |
+| **`AUTO CDC INTO`** | Declarative-pipeline replacement for hand-written MERGE (formerly `APPLY CHANGES INTO`); handles ordering via `SEQUENCE BY` and SCD Type 1/2. |
 | **Gold table** | Persisted Delta table you manage manually (custom MERGE/UPDATE/DELETE). |
 | **Gold view** | Saved SQL query; no storage; recomputed at query time. |
-| **Materialized view** | Stored query result; refreshed by a pipeline; CANNOT be a streaming source. |
+| **Materialized view** | Stored query result; refreshed by a pipeline; CANNOT be a streaming source (refresh updates/deletes existing rows — not append-only, which streaming requires). |
 | **Streaming table** | Append-only persisted table fed by a stream; CAN be both sink and source. |
 | **Pipeline expectation** | Data quality assertion inside a Spark Declarative Pipeline. |
 | **`expect`** | Warn on violation; row kept. |
