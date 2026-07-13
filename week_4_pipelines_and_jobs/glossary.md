@@ -27,10 +27,13 @@
 | **Triggered pipeline** | Pipeline runs once and stops — ideal for scheduled batch refreshes. |
 | **Continuous pipeline** | Pipeline runs forever — ideal for streaming. |
 | **Event log** | Delta table of pipeline lifecycle events (`flow_definition`, `flow_progress`, `update_progress`, `cluster_resources`). Expectation violations are recorded inside `flow_progress` events under `details:flow_progress.data_quality`. |
+| **CDC (Change Data Capture)** | General pattern: mutations are re-encoded as an append-only event log (source-DB CDC, own change events, or Delta CDF) and applied at the target — streaming sources themselves always stay append-only. |
 | **Auto CDC INTO** | Current SQL syntax for applying CDC changes into a target streaming table (replaces old DLT `APPLY CHANGES INTO`). |
 | **`KEYS`** | `AUTO CDC INTO` clause — primary keys identifying records. |
 | **`SEQUENCE BY`** | `AUTO CDC INTO` clause — column that orders changes (e.g., commit timestamp). |
 | **`APPLY AS DELETE WHEN`** | `AUTO CDC INTO` clause — predicate marking a row as deleted. |
+| **Change Data Feed (CDF)** | Delta feature (`delta.enableChangeDataFeed = true`): a mutating table publishes its changes (`_change_type` insert/update_preimage/update_postimage/delete) as a readable feed — `table_changes()` (batch) or `readChangeFeed` (stream). Enables streaming FROM non-append-only tables. |
+| **`skipChangeCommits`** | Stream-read option to ignore update/delete commits in a Delta source — changes are lost downstream; the no-CDF workaround. |
 | **`STORED AS SCD TYPE 1`** | Overwrite-only target — current state only. |
 | **`STORED AS SCD TYPE 2`** | History-preserving target — adds validity windows per record. |
 | **Stream-snapshot join** | Streaming source joined against a static/snapshot table. New rows × full snapshot. |

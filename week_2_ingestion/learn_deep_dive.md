@@ -343,6 +343,11 @@ Scope creation requires admin: `databricks secrets create-scope ops`.
 | NetSuite | Incremental |
 | SharePoint | Incremental |
 
+> CDC is **not** exclusive to managed connectors — it is a general pattern (re-encode mutations as an append-only
+> event log, apply at the target). The managed connectors merely consume the *source database's* CDC feed for you.
+> You can also feed your own change events into `AUTO CDC INTO`, or stream a Delta table's own changes via
+> **Change Data Feed** — both covered in `../week_4_pipelines_and_jobs/learn_pipelines.md` (CDC section).
+
 Architecture (recap from `learn_lakeflow_connect.md`):
 
 ```

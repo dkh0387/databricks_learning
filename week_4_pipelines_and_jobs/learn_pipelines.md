@@ -111,8 +111,24 @@
 
 ## Change Data Capture (CDC)
 
-- **CDC:** technique used to track changes in data sources (database, lakehouse, etc.) and apply them to a target system
-  _Note:_ CDC must be configured in the source system, for a database see `../init/04_configure_cdc_ct_support.sql`
+- **CDC:** technique used to track changes in data sources (database, lakehouse, etc.) and apply them to a target system.
+  It is a **general pattern**, not tied to managed connectors — it shows up in three places on Databricks:
+    1. **Source-database CDC via managed connectors** (SQL Server etc.): the *database's own* CDC/Change-Tracking
+       feature produces the change feed, Lakeflow Connect consumes and applies it fully managed.
+       _Note:_ CDC must be configured in the source system, for a database see `../init/04_configure_cdc_ct_support.sql`
+    2. **Your own change events + `AUTO CDC INTO`**: any source works (files, Kafka, …) as long as it delivers events
+       with an operation column and a sequence column — the repo's `02_pipeline_auto_cdc_scd2.sql` feeds a plain JSON
+       event file, no database involved.
+    3. **Delta Change Data Feed (CDF)**: a mutating Delta table publishes its own changes as a readable change feed
+       (see below).
+- **Why CDC does not "break" the append-only rule** — it works around it:
+  streaming always requires an append-only log; CDC does not change that. The trick is **re-encoding**: instead of
+  mutating rows in place, the mutations themselves are written as *new appended event rows* ("customer 6 was deleted"
+  is an INSERT into the event log). The stream still reads forward, append-only, exactly-once — and only at the
+  **target** does `AUTO CDC INTO` (or `foreachBatch` + MERGE) apply the events as real updates/deletes. That is why
+  the target streaming table may mutate while every streaming *source* stays append-only.
+  Chain: mutating source → encode changes as append-only event log (DB CDC, own events, or CDF) → stream reads the
+  log → apply at the target.
 - **SCD (Slowly Changing Dimension):** defines how historical changes are tracked and stored in a target system
   Two types:
     - SCD Type 1: overwrites existing data (old data is gone).
@@ -132,6 +148,36 @@
   STORED AS SCD TYPE 1
   ```
 
+### Delta Change Data Feed (CDF) — streaming FROM a mutating table
+
+The reverse direction: you want to stream **out of** a Delta table that receives updates/deletes — which normally
+fails on exactly the append-only rule. CDF makes the table publish its own changes as an append-only feed of change
+events:
+
+```sql
+-- enable on the table (or set at creation)
+ALTER TABLE dea_learning.silver.customers_silver
+  SET TBLPROPERTIES (delta.enableChangeDataFeed = true);
+
+-- batch: read changes between versions/timestamps
+SELECT * FROM table_changes('dea_learning.silver.customers_silver', 2, 5);
+```
+
+```python
+# streaming: consume the change feed instead of the table rows
+(spark.readStream
+   .option("readChangeFeed", "true")
+   .table("dea_learning.silver.customers_silver"))
+```
+
+Each change row carries `_change_type` (`insert`, `update_preimage`, `update_postimage`, `delete`) plus
+`_commit_version` / `_commit_timestamp` — i.e. the mutations arrive re-encoded as appended event rows, same principle
+as above. Downstream you apply them with `AUTO CDC INTO` or `foreachBatch` + MERGE.
+
+Cheap alternative without CDF: `.option("skipChangeCommits", "true")` lets a stream read such a table by **ignoring**
+update/delete commits entirely — changes are silently lost downstream; only acceptable when downstream truly only
+needs appended rows.
+
 ## Additional features (out of scope for this course)
 
 - **Flows:** it allows blending multiple pipelines into a single output table.
@@ -140,7 +186,7 @@
 - **Full native Delta Lake support:** includes:
     - Liquid clustering: automatically optimizes files for better performance during pipeline execution
     - Row Level Security & Column Masking: enforce fine-grained access control for streaming tables and views
-    - Change Data Feed: captures changes in streaming tables and sends them to external systems
+    - Change Data Feed: covered above — captures a table's changes as a readable feed (also usable towards external systems)
 - **Full Unity Catalog support:** publish to multiple catalogs and schemas; read streaming tables and views in Dedicated
   Access Mode
 - **Performance tuning:**
@@ -162,3 +208,5 @@
 - Event Logs and pipeline metrics
 - Change Data Capture (CDC) using `AUTO CDC INTO` (the 2026 replacement of the old `APPLY CHANGES INTO` DLT syntax) to
   handle slowly changing dimensions (SCD)
+- CDC is a general pattern (DB CDC via managed connectors, own change events, Delta CDF) — it re-encodes mutations as
+  an append-only event log; streaming sources always stay append-only, changes are applied at the target
