@@ -109,7 +109,7 @@ AS SELECT
      item.quantity * item.unit_price AS line_total,
      o.currency
    FROM STREAM(${catalog}.bronze.bronze_orders) o
-   LATERAL VIEW explode(from_json(o.items, 'ARRAY<STRUCT<item_id BIGINT, quantity INT, unit_price DOUBLE>>')) AS item;
+   LATERAL VIEW explode(o.items) AS item;
 
 -- COMMAND ----------
 
