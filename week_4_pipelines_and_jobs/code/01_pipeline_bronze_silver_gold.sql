@@ -115,7 +115,9 @@ AS SELECT
      item.quantity * item.unit_price AS line_total,
      o.currency
    FROM STREAM(dea_learning.bronze.bronze_orders) o
-   LATERAL VIEW explode(from_json(o.items, 'ARRAY<STRUCT<item_id BIGINT, quantity INT, unit_price DOUBLE>>')) AS item;
+   -- items is already ARRAY<STRUCT<...>>: STREAM read_files infers column types — no from_json needed
+   -- (unlike the week-2 Auto Loader bronze, where items lands as a JSON STRING)
+   LATERAL VIEW explode(o.items) AS item;
 
 -- COMMAND ----------
 
