@@ -35,6 +35,16 @@
       }
     },
     {
+      "task_key": "cdf_consumer",
+      "description": "Drain customers_scd2's Change Data Feed into gold.customers_cdf (foreachBatch + MERGE, availableNow trigger).",
+      "depends_on": [{"task_key": "cdc_pipeline"}],
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/<your-user>/databricks_learning/week_4_pipelines_and_jobs/code/08_cdf_downstream_consumer",
+        "source": "WORKSPACE"
+      },
+      "job_cluster_key": "main"
+    },
+    {
       "task_key": "weekday_check",
       "description": "Compute day_of_week and emit it as a task value; downstream tasks branch on it.",
       "depends_on": [{"task_key": "medallion_pipeline"}],

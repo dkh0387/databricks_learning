@@ -34,7 +34,11 @@ STORED AS SCD TYPE 1;
 -- COMMAND ----------
 
 -- 3. Target SCD Type 2 — full change history with __START_AT / __END_AT validity windows
-CREATE OR REFRESH STREAMING TABLE dea_learning.silver.customers_scd2;
+-- CDF enabled: AUTO CDC mutates this table (upserts, deletes, __END_AT updates), so it cannot be
+-- consumed with STREAM(...) downstream. The Change Data Feed re-encodes those mutations as an
+-- append-only feed of change events — consumed in 08_cdf_downstream_consumer.py.
+CREATE OR REFRESH STREAMING TABLE dea_learning.silver.customers_scd2
+TBLPROPERTIES (delta.enableChangeDataFeed = true);
 
 CREATE FLOW customers_scd2_flow AS AUTO CDC INTO dea_learning.silver.customers_scd2
 FROM STREAM dea_learning.bronze.cdc_customer_events
@@ -59,3 +63,18 @@ STORED AS SCD TYPE 2;
 -- MAGIC * `customer_id = 13` (Maya Patel) — two SCD2 rows: the original Week 2 seed + email change.
 -- MAGIC * `customer_id = 6` (Faisal Khan) — INSERTed then DELETEd. **Removed** from SCD1; SCD2 retains the inserted row with `__END_AT` set to the deletion time.
 -- MAGIC * `customer_id = 21` (Ulrich Becker) — INSERT then UPDATE → two SCD2 rows.
+
+-- COMMAND ----------
+
+-- MAGIC %md
+-- MAGIC ## Going further downstream — why CDF?
+-- MAGIC `customers_scd2` is the target of an AUTO CDC flow, so it **mutates** and cannot be a streaming source
+-- MAGIC (`STREAM(customers_scd2)` fails — not append-only). Options downstream:
+-- MAGIC * **MV** — if downstream only needs current/aggregated state: `... FROM customers_scd2 WHERE __END_AT IS NULL`
+-- MAGIC   (MV refresh reconciles, copes with mutations — no CDF needed).
+-- MAGIC * **CDF** — if downstream must *stream*: the `delta.enableChangeDataFeed` property above makes the table
+-- MAGIC   publish its mutations as append-only change events (`_change_type`, `_commit_version`).
+-- MAGIC   Consumer example: `08_cdf_downstream_consumer.py` (readChangeFeed → `foreachBatch` + MERGE).
+-- MAGIC
+-- MAGIC Same trick one level down the chain: volume events (append-only) → AUTO CDC applies → SCD2 mutates →
+-- MAGIC CDF re-encodes the mutations as an append-only log → downstream stream reads → MERGE applies at the next target.

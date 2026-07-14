@@ -303,6 +303,9 @@ def upsert_batch(batch_df, batch_id):
   .start())
 ```
 
+The same pattern also consumes a Delta table's **Change Data Feed** (streaming from a *mutating* table) — worked
+example in `../week_4_pipelines_and_jobs/code/08_cdf_downstream_consumer.py`.
+
 ### MERGE vs `AUTO CDC INTO` in declarative pipelines
 
 Inside Lakeflow Spark Declarative Pipelines you don't hand-write MERGE: `AUTO CDC INTO` (formerly

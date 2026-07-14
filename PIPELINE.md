@@ -109,6 +109,7 @@ Declarative Automation Bundle, governed by Unity Catalog.
 | `week_4_pipelines_and_jobs/code/04_query_lakeflow_system_tables.sql` | Observability queries over `system.lakeflow.*` |
 | `week_4_pipelines_and_jobs/code/06_gold_quality_audit.sql` | Saved-query source for the job's `quality_audit` SQL task — fails the task via `raise_error()` on violations |
 | `week_4_pipelines_and_jobs/code/07_region_report.py` | Per-region gold report — inner notebook of the job's `for_each_region` task (`region` = `{{input}}`) |
+| `week_4_pipelines_and_jobs/code/08_cdf_downstream_consumer.py` | Streams `customers_scd2`'s Change Data Feed into `gold.customers_cdf` (`foreachBatch` + MERGE) — streaming from a mutating AUTO CDC target |
 | `week_5_cicd_and_troubleshooting/code/databricks.yml` | DAB packaging the pipeline + job for dev / staging / prod |
 
 ## 5. Orchestration (Lakeflow Job)
@@ -126,7 +127,14 @@ Declarative Automation Bundle, governed by Unity Catalog.
 │ medallion_pipe  │               │  cdc_pipeline      │
 │ bronze→silver→  │               │  AUTO CDC INTO     │
 │ gold            │               │  scd1 / scd2       │
-└──────┬──────────┘               └────────────────────┘
+└──────┬──────────┘               └─────────┬──────────┘
+       │                                    │
+       │                                    ▼
+       │                          ┌────────────────────┐
+       │                          │  cdf_consumer      │  (notebook task:
+       │                          │  CDF → MERGE into  │   08_cdf_downstream_consumer.py)
+       │                          │  gold.customers_cdf│
+       │                          └────────────────────┘
        │
        ├──────────────────────────────────────────────────┐
        │                                                  │

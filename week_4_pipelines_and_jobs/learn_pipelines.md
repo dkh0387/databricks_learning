@@ -178,6 +178,18 @@ Cheap alternative without CDF: `.option("skipChangeCommits", "true")` lets a str
 update/delete commits entirely — changes are silently lost downstream; only acceptable when downstream truly only
 needs appended rows.
 
+**When you actually hit this in a pipeline:** the target of an `AUTO CDC` flow (e.g. `customers_scd2`) mutates and
+therefore **cannot be consumed with `STREAM(...)`**. Downstream options:
+- **MV** — downstream only needs current/aggregated state: `... FROM customers_scd2 WHERE __END_AT IS NULL`.
+  MV refresh reconciles and copes with mutations; no CDF needed (see week 3's MV-vs-streaming-source explanation).
+- **CDF** — downstream must *stream* (custom incremental logic, external systems): enable
+  `delta.enableChangeDataFeed` on the AUTO CDC target and consume the change feed with `foreachBatch` + MERGE.
+  Note the **composite merge key** for SCD2 replicas (`customer_id` + `__START_AT`) — every version is its own row.
+
+Worked example in this repo: `code/02_pipeline_auto_cdc_scd2.sql` (enables CDF on `customers_scd2`) +
+`code/08_cdf_downstream_consumer.py` (readChangeFeed → `foreachBatch` MERGE into `gold.customers_cdf`) — wired into
+the job as the `cdf_consumer` task downstream of `cdc_pipeline` (`code/03_lakeflow_job_definition.json`).
+
 ## Additional features (out of scope for this course)
 
 - **Flows:** it allows blending multiple pipelines into a single output table.
