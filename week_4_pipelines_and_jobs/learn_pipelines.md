@@ -117,7 +117,7 @@
        feature produces the change feed, Lakeflow Connect consumes and applies it fully managed.
        _Note:_ CDC must be configured in the source system, for a database see `../init/04_configure_cdc_ct_support.sql`
     2. **Your own change events + `AUTO CDC INTO`**: any source works (files, Kafka, …) as long as it delivers events
-       with an operation column and a sequence column — the repo's `02_pipeline_auto_cdc_scd2.sql` feeds a plain JSON
+       with an operation column and a sequence column — the repo's `pipeline_auto_cdc_scd2.sql` feeds a plain JSON
        event file, no database involved.
     3. **Delta Change Data Feed (CDF)**: a mutating Delta table publishes its own changes as a readable change feed
        (see below).
@@ -186,7 +186,7 @@ therefore **cannot be consumed with `STREAM(...)`**. Downstream options:
   `delta.enableChangeDataFeed` on the AUTO CDC target and consume the change feed with `foreachBatch` + MERGE.
   Note the **composite merge key** for SCD2 replicas (`customer_id` + `__START_AT`) — every version is its own row.
 
-Worked example in this repo: `code/02_pipeline_auto_cdc_scd2.sql` (enables CDF on `customers_scd2`) +
+Worked example in this repo: `code/pipeline_auto_cdc_scd2.sql` (enables CDF on `customers_scd2`) +
 `code/08_cdf_downstream_consumer.py` (readChangeFeed → `foreachBatch` MERGE into `gold.customers_cdf`) — wired into
 the job as the `cdf_consumer` task downstream of `cdc_pipeline` (`code/03_lakeflow_job_definition.json`).
 

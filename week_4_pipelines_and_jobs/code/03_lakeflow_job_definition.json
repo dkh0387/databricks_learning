@@ -1,119 +1,185 @@
 {
   "name": "dea_learning_orders_etl",
+  "description": "Week 4 · Lakeflow Job that orchestrates the medallion pipeline.\n1. Pipeline: Streaming raw data from storage volumes\n2. Pipeline: Creating flows for cdc and scd 1 & 2 for customers",
+  "email_notifications": {
+    "no_alert_for_skipped_runs": false
+  },
+  "webhook_notifications": {},
+  "timeout_seconds": 0,
+  "max_concurrent_runs": 1,
+  "tasks": [
+    {
+      "task_key": "ingest_setup",
+      "run_if": "ALL_SUCCESS",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/denis.khaskin@codecentric.de/databricks_learning/week_2_ingestion/code/00_setup_catalog_and_seed",
+        "source": "WORKSPACE"
+      },
+      "max_retries": 2,
+      "min_retry_interval_millis": 60000,
+      "retry_on_timeout": false,
+      "disable_auto_optimization": false,
+      "timeout_seconds": 0,
+      "email_notifications": {},
+      "webhook_notifications": {},
+      "environment_key": "Default",
+      "disabled": false
+    },
+    {
+      "task_key": "cdc_pipeline",
+      "depends_on": [
+        {
+          "task_key": "ingest_setup"
+        }
+      ],
+      "run_if": "ALL_SUCCESS",
+      "pipeline_task": {
+        "pipeline_id": "8afd2817-b1af-4385-80aa-0c008cc34a89"
+      },
+      "timeout_seconds": 0,
+      "email_notifications": {},
+      "webhook_notifications": {},
+      "disabled": false
+    },
+    {
+      "task_key": "medallion_pipeline",
+      "depends_on": [
+        {
+          "task_key": "ingest_setup"
+        }
+      ],
+      "run_if": "ALL_SUCCESS",
+      "pipeline_task": {
+        "pipeline_id": "9b175a00-cec3-48fe-8369-dbcb5e44d564"
+      },
+      "timeout_seconds": 0,
+      "email_notifications": {},
+      "webhook_notifications": {},
+      "disabled": false
+    },
+    {
+      "task_key": "for_each_region",
+      "depends_on": [
+        {
+          "task_key": "medallion_pipeline"
+        }
+      ],
+      "run_if": "ALL_SUCCESS",
+      "for_each_task": {
+        "inputs": "[\"EU\",\"NA\",\"APAC\",\"LATAM\",\"EMEA\"]",
+        "concurrency": 3,
+        "task": {
+          "task_key": "region_report",
+          "run_if": "ALL_SUCCESS",
+          "notebook_task": {
+            "notebook_path": "/Workspace/Users/denis.khaskin@codecentric.de/databricks_learning/week_4_pipelines_and_jobs/code/07_region_report",
+            "base_parameters": {
+              "region": "{{input}}"
+            },
+            "source": "WORKSPACE"
+          },
+          "timeout_seconds": 0,
+          "email_notifications": {},
+          "webhook_notifications": {},
+          "environment_key": "Default",
+          "disabled": false
+        }
+      },
+      "timeout_seconds": 0,
+      "email_notifications": {},
+      "webhook_notifications": {},
+      "disabled": false
+    },
+    {
+      "task_key": "weekday_check",
+      "depends_on": [
+        {
+          "task_key": "medallion_pipeline"
+        }
+      ],
+      "run_if": "ALL_SUCCESS",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/denis.khaskin@codecentric.de/databricks_learning/week_4_pipelines_and_jobs/code/05_weekday_check",
+        "source": "WORKSPACE"
+      },
+      "timeout_seconds": 0,
+      "email_notifications": {},
+      "webhook_notifications": {},
+      "environment_key": "Default",
+      "disabled": false
+    },
+    {
+      "task_key": "weekday_audit",
+      "depends_on": [
+        {
+          "task_key": "weekday_check"
+        }
+      ],
+      "run_if": "ALL_SUCCESS",
+      "condition_task": {
+        "op": "LESS_THAN",
+        "left": "{{tasks.weekday_check.values.day_of_week}}",
+        "right": "6"
+      },
+      "timeout_seconds": 0,
+      "email_notifications": {},
+      "webhook_notifications": {},
+      "disabled": false
+    },
+    {
+      "task_key": "quality_audit",
+      "depends_on": [
+        {
+          "task_key": "weekday_audit",
+          "outcome": "true"
+        }
+      ],
+      "run_if": "ALL_SUCCESS",
+      "sql_task": {
+        "query": {
+          "query_id": "614e08cd-6188-4a85-8603-09c6c4ab4478"
+        },
+        "warehouse_id": "c253e00b6cf42687"
+      },
+      "timeout_seconds": 0,
+      "email_notifications": {},
+      "webhook_notifications": {},
+      "disabled": false
+    },
+    {
+      "task_key": "cdf_consumer",
+      "depends_on": [
+        {
+          "task_key": "cdc_pipeline"
+        }
+      ],
+      "run_if": "ALL_SUCCESS",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/denis.khaskin@codecentric.de/databricks_learning/week_4_pipelines_and_jobs/code/08_cdf_downstream_consumer",
+        "source": "WORKSPACE"
+      },
+      "timeout_seconds": 0,
+      "email_notifications": {},
+      "environment_key": "Default",
+      "disabled": false
+    }
+  ],
+  "queue": {
+    "enabled": true
+  },
   "parameters": [
     {
       "name": "min_day_of_week",
       "default": "1"
     }
   ],
-  "tasks": [
+  "environments": [
     {
-      "task_key": "ingest_setup",
-      "description": "Make sure the raw landing volume has the latest files. Week 4 Lakeflow Job orchestrating the medallion pipeline — import via 'Workflows -> Create Job -> JSON view -> Paste'; replace pipeline_id, warehouse_id and the user portion of the notebook paths with your workspace values.",
-      "notebook_task": {
-        "notebook_path": "/Workspace/Users/<your-user>/databricks_learning/week_2_ingestion/code/00_setup_catalog_and_seed",
-        "source": "WORKSPACE"
-      },
-      "job_cluster_key": "main",
-      "max_retries": 2,
-      "min_retry_interval_millis": 60000
-    },
-    {
-      "task_key": "medallion_pipeline",
-      "description": "Bronze -> silver -> gold via the declarative pipeline",
-      "depends_on": [{"task_key": "ingest_setup"}],
-      "pipeline_task": {
-        "pipeline_id": "9b175a00-cec3-48fe-8369-dbcb5e44d564"
-      }
-    },
-    {
-      "task_key": "cdc_pipeline",
-      "description": "Apply CDC into customers_scd1 / customers_scd2",
-      "depends_on": [{"task_key": "ingest_setup"}],
-      "pipeline_task": {
-        "pipeline_id": "8afd2817-b1af-4385-80aa-0c008cc34a89"
-      }
-    },
-    {
-      "task_key": "cdf_consumer",
-      "description": "Drain customers_scd2's Change Data Feed into gold.customers_cdf (foreachBatch + MERGE, availableNow trigger).",
-      "depends_on": [{"task_key": "cdc_pipeline"}],
-      "notebook_task": {
-        "notebook_path": "/Workspace/Users/<your-user>/databricks_learning/week_4_pipelines_and_jobs/code/08_cdf_downstream_consumer",
-        "source": "WORKSPACE"
-      },
-      "job_cluster_key": "main"
-    },
-    {
-      "task_key": "weekday_check",
-      "description": "Compute day_of_week and emit it as a task value; downstream tasks branch on it.",
-      "depends_on": [{"task_key": "medallion_pipeline"}],
-      "notebook_task": {
-        "notebook_path": "/Workspace/Users/<your-user>/databricks_learning/week_4_pipelines_and_jobs/code/05_weekday_check",
-        "source": "WORKSPACE"
-      },
-      "job_cluster_key": "main"
-    },
-    {
-      "task_key": "weekday_audit",
-      "description": "Only run a SQL audit on weekdays",
-      "depends_on": [{"task_key": "weekday_check"}],
-      "condition_task": {
-        "op": "LESS_THAN",
-        "left":  "{{tasks.weekday_check.values.day_of_week}}",
-        "right": "6"
-      }
-    },
-    {
-      "task_key": "quality_audit",
-      "description": "SQL audit over gold tables — save 06_gold_quality_audit.sql as a workspace query, paste its ID below",
-      "depends_on": [{"task_key": "weekday_audit", "outcome": "true"}],
-      "run_if": "ALL_SUCCESS",
-      "sql_task": {
-        "warehouse_id": "REPLACE_WITH_SQL_WAREHOUSE_ID",
-        "query": {
-          "query_id": "REPLACE_WITH_SAVED_QUERY_ID"
-        }
-      }
-    },
-    {
-      "task_key": "for_each_region",
-      "description": "Run 07_region_report.py once per region ({{input}} -> region parameter).",
-      "depends_on": [{"task_key": "medallion_pipeline"}],
-      "for_each_task": {
-        "inputs": "[\"EU\",\"NA\",\"APAC\",\"LATAM\",\"EMEA\"]",
-        "concurrency": 3,
-        "task": {
-          "task_key": "region_report",
-          "notebook_task": {
-            "notebook_path": "/Workspace/Users/<your-user>/databricks_learning/week_4_pipelines_and_jobs/code/07_region_report",
-            "source": "WORKSPACE",
-            "base_parameters": {
-              "region": "{{input}}"
-            }
-          },
-          "job_cluster_key": "main"
-        }
+      "environment_key": "Default",
+      "spec": {
+        "environment_version": "5"
       }
     }
   ],
-  "job_clusters": [
-    {
-      "job_cluster_key": "main",
-      "new_cluster": {
-        "spark_version": "15.4.x-scala2.12",
-        "node_type_id": "i3.xlarge",
-        "num_workers": 2
-      }
-    }
-  ],
-  "schedule": {
-    "quartz_cron_expression": "0 0 4 * * ?",
-    "timezone_id": "Europe/Berlin",
-    "pause_status": "UNPAUSED"
-  },
-  "email_notifications": {
-    "on_failure": ["<your-email>@example.com"]
-  },
-  "max_concurrent_runs": 1
+  "performance_target": "PERFORMANCE_OPTIMIZED"
 }

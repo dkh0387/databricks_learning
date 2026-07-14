@@ -1,0 +1,113 @@
+# Week 5 · Declarative Automation Bundle for the medallion pipeline.
+# Deploys the Week 4 declarative pipeline + the orchestrating Lakeflow Job across dev / staging / prod targets.
+#
+# Bundle root = this folder. Layout:
+#   databricks.yml                        ← this file
+#   src/
+#   ├── pipeline_bronze_silver_gold.sql   ← env-agnostic copy (uses ${catalog} / ${landing_path})
+#   ├── pipeline_auto_cdc_scd2.sql        ← env-agnostic copy
+#   └── setup_catalog_and_seed.py         ← creates catalog/schemas/volume + seeds data (reads `catalog` widget)
+#   (code/databricks.yml is the annotated teaching template — this file is the deployable instantiation.)
+#
+# ONE workspace (id 185960349365378), separated by catalogs: dea_learning_dev / dea_learning_staging /
+# dea_learning_prod. The catalogs MUST exist before the first deploy — the pipelines API validates
+# `catalog` at resource creation (404 CATALOG_DOES_NOT_EXIST otherwise). One-time bootstrap:
+#   for env in dev staging prod; do databricks catalogs create "dea_learning_${env}" \
+#     --storage-root "abfss://unity-catalog-storage@dbstorageghdo4vkcqfmqq.dfs.core.windows.net/185960349365378/dea_learning_${env}" \
+#     -p adb-185960349365378; done
+# Schemas/volume/seed data inside the catalog are then created by the job's ingest_setup task.
+#
+# Then: databricks bundle validate -t dev → deploy -t dev → run orders_etl -t dev
+
+bundle:
+  name: dea_learning_orders
+  databricks_cli_version: ">=0.230.0"
+
+workspace:
+  host: https://adb-185960349365378.18.azuredatabricks.net
+  # Two ~/.databrickscfg profiles point at this host — pin one to avoid the interactive picker
+  profile: adb-185960349365378
+
+variables:
+  catalog:
+    description: "Target Unity Catalog"
+    default: dea_learning_dev
+  landing_volume_path:
+    description: "Volume root for raw landing"
+    default: "/Volumes/dea_learning_dev/raw/landing"
+  notification_email:
+    description: "Failure email"
+    default: denis.khaskin@codecentric.de
+
+sync:
+  include:
+    - "src/**"
+  exclude:
+    - "**/__pycache__/**"
+    - "tests/**"
+
+resources:
+  pipelines:
+    medallion_orders:
+      name: "medallion_orders_${bundle.target}"
+      serverless: true   # serverless-only workspace; also enables incremental MV refresh
+      catalog: ${var.catalog}
+      target: bronze   # default schema for unqualified names only — the src SQL fully qualifies via ${catalog}
+      libraries:
+        - notebook:
+            path: ./src/pipeline_bronze_silver_gold.sql
+        - notebook:
+            path: ./src/pipeline_auto_cdc_scd2.sql
+      # These keys are substituted as ${key} inside the pipeline SQL text
+      configuration:
+        catalog: ${var.catalog}
+        landing_path: ${var.landing_volume_path}
+
+  jobs:
+    orders_etl:
+      name: "orders_etl_${bundle.target}"
+      email_notifications:
+        on_failure: ["${var.notification_email}"]
+      tasks:
+        # No job_clusters / job_cluster_key: a notebook task without compute spec runs on
+        # serverless job compute (serverless-only workspace).
+        - task_key: ingest_setup
+          notebook_task:
+            notebook_path: ./src/setup_catalog_and_seed.py
+            base_parameters:
+              catalog: ${var.catalog}   # read via dbutils.widgets.get("catalog") in the notebook
+        - task_key: medallion
+          depends_on:
+            - task_key: ingest_setup
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.medallion_orders.id}
+
+# All three targets deploy to the SAME workspace — separation happens via catalog names and, in dev,
+# via mode:development resource prefixes ([dev <user>] …).
+targets:
+  dev:
+    default: true
+    mode: development          # prefixes resources with [dev <user>], pauses schedules
+    variables:
+      catalog: dea_learning_dev
+      landing_volume_path: "/Volumes/dea_learning_dev/raw/landing"
+
+  staging:
+    variables:
+      catalog: dea_learning_staging
+      landing_volume_path: "/Volumes/dea_learning_staging/raw/landing"
+
+  prod:
+    # Real-world production hardening (needs a service principal + groups that don't exist in a
+    # single-user learning workspace — enable when you have them):
+    #   mode: production
+    #   run_as:
+    #     service_principal_name: "prod-deployer-sp"
+    #   permissions:
+    #     - level: CAN_VIEW
+    #       group_name: data_consumers
+    #     - level: CAN_MANAGE
+    #       group_name: data_platform_admins
+    variables:
+      catalog: dea_learning_prod
+      landing_volume_path: "/Volumes/dea_learning_prod/raw/landing"

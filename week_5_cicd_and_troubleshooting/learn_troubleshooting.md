@@ -77,6 +77,24 @@ Open from any task run → *Spark UI* link → *Stages* tab → click the long-r
 3. **High I/O?** → input read time dominates.
 4. **High GC time?** → executor memory undersized.
 
+### Why skew hurts
+
+A stage finishes only when its **slowest task** finishes. After a shuffle, all rows of one join/grouping key sit in
+one partition, and one partition = one task on one core — a hot key is therefore **indivisible** by normal
+partitioning. With one whale key (say 1M rows) and everyone else at ~100 rows:
+
+```
+Task for key 2:  100 rows      → done in 0.1 s  ─┐
+Task for key 3:  100 rows      → done in 0.1 s   ├─ 19 cores idle, waiting
+...                                              ─┘
+Task for key 1:  1,000,000 rows → runs 20 min    ← the whole stage waits for HIM
+```
+
+You pay for a 20-node cluster and effectively compute on one core — and adding workers changes nothing, the monster
+partition still belongs to a single task. It compounds: the straggler's working set often exceeds executor memory →
+**spill** (slower) or **OOM** → retry → fails again. And it hides: *average* task duration looks great; only the
+distribution (Max ≫ Median) exposes it — which is exactly what the Spark UI checklist below looks for.
+
 ### Detecting skew
 
 In *Summary Metrics for Tasks*, compare **Max** vs **75th percentile** (and **Median**) for:
@@ -109,6 +127,22 @@ Any non-zero spill = the executor ran low on memory and paged data to disk. Slow
 | Broadcast join failing OOM | Lower the threshold or convert to sort-merge join (set threshold to `-1`). |
 | Long GC time | Increase executor memory; consider Photon. |
 | Long planning time | Cache table stats with `ANALYZE TABLE … COMPUTE STATISTICS`, or break giant queries into temp views. |
+
+### Why more shuffle partitions do NOT fix skew (exam distractor!)
+
+Shuffle placement is `hash(key) % numPartitions` — all rows of the same key hash identically and land in the **same
+partition, no matter how many partitions exist**. Raising `spark.sql.shuffle.partitions` from 200 to 2000 only
+spreads the *other* keys thinner (plus 1800 extra tiny tasks of overhead); the hot key's million rows remain one
+indivisible block, the straggler runs exactly as long as before. The fixes work on a different axis: **AQE splits
+the oversized partition after the fact**, **salting changes the key itself** (`1` → `(1, salt 0..15)` = 16 hashes =
+16 tasks), and a **broadcast join removes the shuffle entirely** (no shuffle → no skew; the realistic fix whenever
+the small side fits under the threshold).
+
+| Symptom | Diagnosis | Right knob |
+| --- | --- | --- |
+| **All** tasks of a stage spill / are too big | Too few partitions for the volume (divisible problem) | **Raise** `spark.sql.shuffle.partitions` |
+| Hundreds of tiny tasks, small files, overhead | Too many partitions for little data | **Lower** it (or AQE coalescing) |
+| **One** task ≫ all others, Max shuffle read ≫ Median | Skew — hot key (indivisible problem) | AQE skew join, salting, broadcast — **not** the partition count |
 
 ### AQE — Adaptive Query Execution
 
@@ -271,6 +305,8 @@ When to tune what:
 ## 6. Exam-day quick reference
 
 - **Skew flag**: `max duration > 1.5 × p75`, or shuffle read max ≫ median.
+- **Skew is NOT fixed by raising `shuffle.partitions`** — the hot key still hashes into one partition. Fixes: AQE
+  skew join, salting, broadcast. Partition count fixes uniform-volume problems (all tasks too big / too small).
 - **Spill flag**: any non-zero "Shuffle Spill (Disk)".
 - **Driver OOM**: caused by `collect()` / `toPandas()` / huge broadcast.
 - **Executor OOM**: fix with bigger instance, more shuffle partitions, or skew remediation.

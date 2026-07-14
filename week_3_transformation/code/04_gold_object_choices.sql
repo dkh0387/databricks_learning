@@ -51,7 +51,7 @@ SELECT count(*) FROM gold.eu_orders;
 
 -- COMMAND ----------
 
--- Place this statement inside a pipeline notebook (../../week_4_pipelines_and_jobs/code/01_pipeline_bronze_silver_gold.sql shows the full pipeline).
+-- Place this statement inside a pipeline notebook (../../week_4_pipelines_and_jobs/code/pipeline_bronze_silver_gold.sql shows the full pipeline).
 -- CREATE OR REFRESH MATERIALIZED VIEW gold.daily_revenue_mv AS
 -- SELECT to_date(o.order_ts) AS order_date, c.region, sum(o.amount) AS revenue
 -- FROM   bronze.orders_bronze o

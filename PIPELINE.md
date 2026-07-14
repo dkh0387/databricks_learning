@@ -103,8 +103,8 @@ Declarative Automation Bundle, governed by Unity Catalog.
 | --- | --- |
 | `week_2_ingestion/code/00_setup_catalog_and_seed.py` | One-time: create catalog/schemas/volume, upload data files |
 | `week_2_ingestion/code/99_reset_workspace.py` | Full reset: drop shares/recipients + `DROP CATALOG dea_learning CASCADE`; delete pipeline/job manually, then rerun setup |
-| `week_4_pipelines_and_jobs/code/01_pipeline_bronze_silver_gold.sql` | The whole declarative pipeline — bronze + silver + gold for all entities |
-| `week_4_pipelines_and_jobs/code/02_pipeline_auto_cdc_scd2.sql` | CDC pipeline — produces `customers_scd1` + `customers_scd2` |
+| `week_4_pipelines_and_jobs/code/pipeline_bronze_silver_gold.sql` | The whole declarative pipeline — bronze + silver + gold for all entities |
+| `week_4_pipelines_and_jobs/code/pipeline_auto_cdc_scd2.sql` | CDC pipeline — produces `customers_scd1` + `customers_scd2` |
 | `week_4_pipelines_and_jobs/code/03_lakeflow_job_definition.json` | Lakeflow Job orchestrating both pipelines, with conditional and for-each tasks |
 | `week_4_pipelines_and_jobs/code/04_query_lakeflow_system_tables.sql` | Observability queries over `system.lakeflow.*` |
 | `week_4_pipelines_and_jobs/code/06_gold_quality_audit.sql` | Saved-query source for the job's `quality_audit` SQL task — fails the task via `raise_error()` on violations |
@@ -214,8 +214,8 @@ Applied on top of the deployed silver/gold tables:
 ## 9. Running it end-to-end
 
 1. `week_2_ingestion/code/00_setup_catalog_and_seed.py` — bootstrap catalog and upload data files.
-2. **Week 4 pipeline 1** — create a Spark Declarative Pipeline pointed at `01_pipeline_bronze_silver_gold.sql`. Default catalog `dea_learning`, default schema `bronze`. The datasets are **fully qualified** in the SQL, so bronze/silver/gold objects land in their layer schemas regardless of the default. Run an update.
-3. **Week 4 pipeline 2** — create a second pipeline pointed at `02_pipeline_auto_cdc_scd2.sql`. Default catalog `dea_learning`, default schema `bronze`. CDC events publish to `bronze`, the SCD tables to `silver` (fully qualified). Run an update.
+2. **Week 4 pipeline 1** — create a Spark Declarative Pipeline pointed at `pipeline_bronze_silver_gold.sql`. Default catalog `dea_learning`, default schema `bronze`. The datasets are **fully qualified** in the SQL, so bronze/silver/gold objects land in their layer schemas regardless of the default. Run an update.
+3. **Week 4 pipeline 2** — create a second pipeline pointed at `pipeline_auto_cdc_scd2.sql`. Default catalog `dea_learning`, default schema `bronze`. CDC events publish to `bronze`, the SCD tables to `silver` (fully qualified). Run an update.
 4. **Week 4 job** — import `03_lakeflow_job_definition.json`, replace pipeline IDs, run it manually once.
 5. **Week 5 DAB** — copy `databricks.yml` into a bundle scaffold (`databricks bundle init`), then promote `dev → staging → prod`.
 6. **Week 6 governance** — apply the row filter + column mask + grants + ABAC tags from `week_6_governance/code/`.

@@ -1,8 +1,19 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC # Week 5 · Induce + fix data skew on orders × customers
+# MAGIC **Purpose:** a training lab for exam §6 — you can't practice *diagnosing* skew on healthy data, so this
+# MAGIC notebook manufactures the pathology on purpose, makes it visible in the Spark UI, then fixes it twice.
+# MAGIC
+# MAGIC **Why skew is a problem:** a stage finishes when its *slowest* task finishes. All rows of one join key land in
+# MAGIC one partition = one task on one core — a hot key is indivisible. The whale's task grinds for minutes while every
+# MAGIC other core sits idle (you pay for the whole cluster, compute on one core), and its oversized working set spills
+# MAGIC or OOMs. Note: raising `spark.sql.shuffle.partitions` does NOT help — `hash(key) % n` still sends every whale
+# MAGIC row to the same partition. See `learn_troubleshooting.md` ("Why skew hurts").
+# MAGIC
 # MAGIC One customer ("the whale") gets a million synthetic orders. Customer 1 in our seed is the chosen victim.
 # MAGIC Open the Spark UI Stage view between cells to see what skew looks like — and what AQE / salting do to it.
+# MAGIC (Third fix not shown: since `customers` is tiny, a broadcast join would remove the shuffle — and thus the skew —
+# MAGIC entirely; salting is demonstrated because it also works when BOTH sides are large.)
 
 # COMMAND ----------
 

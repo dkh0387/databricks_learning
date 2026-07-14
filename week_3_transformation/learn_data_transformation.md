@@ -323,6 +323,10 @@ See `../week_4_pipelines_and_jobs/learn_pipelines.md`.
 | `spark.executor.memory` | instance-dependent | Executor OOM, high GC time, spill | Cost > performance gain |
 | `spark.driver.memory` | instance-dependent | Driver OOM (often from `collect()`) | Cost > performance gain |
 
+> `shuffle.partitions` fixes **uniform** volume problems (all tasks too big/too small). It does **not** fix skew —
+> `hash(key) % n` sends a hot key's rows to one partition no matter how many partitions exist. Skew fixes: AQE skew
+> join, salting, broadcast. Details: `../week_5_cicd_and_troubleshooting/learn_troubleshooting.md` ("Why skew hurts").
+
 ### Setting them
 
 ```python

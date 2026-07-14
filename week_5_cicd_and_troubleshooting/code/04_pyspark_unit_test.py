@@ -77,3 +77,7 @@ test_normalize_dedupes_to_latest()
 # MAGIC ### Running from CI
 # MAGIC Move `normalize_customers` into `src/transform.py` and the tests into `tests/test_transform.py`,
 # MAGIC then `pytest tests/` in your CI runner — `pyspark.testing.utils` works headless.
+# MAGIC
+# MAGIC Done in this repo: `../src/transform.py` + `../tests/test_transform.py` (with a local-SparkSession
+# MAGIC fixture in `../tests/conftest.py`). Run from the bundle root: `pytest tests/`.
+# MAGIC `tests/` is excluded from bundle sync — it runs in CI, not in the workspace.
