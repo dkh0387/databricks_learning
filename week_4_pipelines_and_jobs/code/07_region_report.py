@@ -48,11 +48,25 @@ display(top_customers)
 
 # COMMAND ----------
 
+# MAGIC %sql
+# MAGIC CREATE TABLE IF NOT EXISTS dea_learning.gold.summary (
+# MAGIC     region STRING,
+# MAGIC     timestamp TIMESTAMP,
+# MAGIC     summary STRING,
+# MAGIC     PRIMARY KEY (region, timestamp)
+# MAGIC );
+
+# COMMAND ----------
+
 row = daily.selectExpr(
     "count(*) AS days", "coalesce(sum(orders), 0) AS orders", "coalesce(sum(revenue), 0.0) AS revenue"
 ).first()
 summary = f"[{REGION}] {row.days} day(s), {row.orders} order(s), total revenue {row.revenue:.2f}"
 print(summary)
 
-# Hand the summary back to the job — visible via {{tasks.<task_key>.values.summary}} downstream
-dbutils.jobs.taskValues.set(key="summary", value=summary)
+# COMMAND ----------
+
+spark.sql(
+    "INSERT INTO dea_learning.gold.summary VALUES (:region, current_date(), :summary_val)",
+    args={"region": REGION, "summary_val": summary}
+);
