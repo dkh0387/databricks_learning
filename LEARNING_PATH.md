@@ -129,7 +129,7 @@ Each week folder contains: `learn*.md` (theory), `glossary.md` (key terms), and 
 1. Read `week_3_transformation/learn_data_transformation.md` and glossary.
 2. Work through Udemy notebooks `2.1`–`2.4` and `3.1`–`3.3` (in `udemy_…/`).
 3. Academy: **Data Analysis with Databricks** OR sections on PySpark/SQL in *Data Engineering with Databricks*.
-4. Run `week_3_transformation/code/` — drill all join types and Gold-object choices.
+4. Run `week_3_transformation/code/` — drill all join types, MERGE INTO (upserts, multiple-match error, insert-only, schema evolution), and Gold-object choices.
 
 ### Week 4 — Pipelines + Jobs (§4, 16%)
 1. Read `week_4_pipelines_and_jobs/learn_jobs.md` and `learn_pipelines.md`.

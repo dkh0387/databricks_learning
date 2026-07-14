@@ -242,7 +242,7 @@ FROM silver.orders;
 
 The workhorse for maintaining silver/gold **tables** — the "custom incremental logic" from the gold-layer decision
 tree below. One atomic statement that inserts, updates, and deletes on a Delta target based on a source batch
-(table, view, or subquery):
+(table, view, or subquery). Runnable drills for everything in this section: `code/05_merge_drills.sql`.
 
 ```sql
 MERGE INTO dea_learning.silver.customers AS t
