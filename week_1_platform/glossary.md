@@ -3,6 +3,8 @@
 | Term | Definition |
 | --- | --- |
 | **Lakehouse** | Architecture combining the openness of a data lake with the management and ACID guarantees of a warehouse — sits on cloud object storage. |
+| **Control plane** | Databricks-managed layer (Databricks' cloud account): web UI, job scheduler, cluster manager, UC metadata. Orchestrates only — never processes data. |
+| **Compute plane** | Where Spark actually runs. Classic: clusters (driver + executors) in the **customer's** cloud account. Serverless: Databricks-managed compute; data stays in customer storage. |
 | **Delta Lake** | Open source storage layer that adds ACID transactions, schema evolution, time travel, and versioning on top of Parquet. |
 | **Delta table** | Table stored in Delta Lake format (Parquet data files + `_delta_log/` JSON transaction log). |
 | **Delta log** | Ordered JSON records of every change to a Delta table — enables time travel and concurrent reads/writes. |

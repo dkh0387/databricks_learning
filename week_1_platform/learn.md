@@ -53,6 +53,24 @@
       `CREATE GLOBAL TEMP VIEW view_name AS SELECT ... FROM ...`
     - Materialized view (covered in Week 3/4): stored, refresh-on-demand, BI-friendly. Cannot be a streaming source.
 
+# Architecture: control plane vs. compute plane
+
+Databricks splits every deployment into two layers — the exam tests *where data processing happens*:
+
+| Layer | Runs in | Contains |
+| --- | --- | --- |
+| **Control plane** | Databricks' cloud account | Web UI, notebooks frontend, job scheduler, cluster manager, Unity Catalog metadata — management only, no Spark data processing |
+| **Compute plane (classic)** | **Customer's cloud account** | The actual clusters (driver + executors as VMs in the customer's VPC/subscription) — all Spark data processing |
+| **Compute plane (serverless)** | Databricks' cloud account | Databricks-managed compute inside a secured environment; still reads/writes the customer's data in the customer's storage |
+
+- With **classic compute**, the entire cluster — driver *and* executors — lives in the customer's
+  account. There is no split where the driver sits in the control plane (a common distractor).
+- **Data at rest** stays in the customer's cloud storage in both models; serverless moves only the
+  *compute* into Databricks' account, not the data.
+- Exam heuristic: "classic (non-serverless) compute — where does processing happen?" →
+  **compute plane in the customer's cloud account**. The control plane never processes data; it
+  orchestrates (UI, scheduler, metadata).
+
 # Compute services
 
 Exam §1 explicitly tests choosing the right compute for a workload. Four options:

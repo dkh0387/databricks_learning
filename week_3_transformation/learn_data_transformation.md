@@ -327,6 +327,37 @@ See `../week_4_pipelines_and_jobs/learn_pipelines.md`.
 > `hash(key) % n` sends a hot key's rows to one partition no matter how many partitions exist. Skew fixes: AQE skew
 > join, salting, broadcast. Details: `../week_5_cicd_and_troubleshooting/learn_troubleshooting.md` ("Why skew hurts").
 
+### Shuffle join vs broadcast join — what actually moves
+
+A join needs matching rows from both tables on the same executor. The two strategies differ only in
+*how the partners are brought together* — the join lookup itself (cheap, in-memory CPU work) happens
+either way. The expensive part is moving data over the network.
+
+**Shuffle join (sort-merge, the default):** neither table is copied to every machine. Spark computes
+`hash(join_key) % n_partitions` for every row of **both** tables, then ships each row to the machine
+that owns its hash bucket. All rows with `country_id = 7` — from the fact *and* the dimension table —
+are guaranteed to land on the same machine; each machine then joins only its own key slice. No final
+"merge" step: the result simply stays distributed. Cost: every row of **both** tables crosses the
+network exactly once — painful when one side has 2 B rows.
+
+**Broadcast join:** the big table doesn't move at all — it is already distributed across executors in
+partitions (randomly with respect to the join key). Spark ships a **full copy of the small table to
+every executor** instead. Each executor then joins its local chunk of the big table via in-memory hash
+lookups against its complete copy. This works because every executor is guaranteed to hold *every
+possible* join partner — no row ever needs to look elsewhere.
+
+| | Shuffle join | Broadcast join |
+| --- | --- | --- |
+| Big table | shipped once, redistributed by key hash | **stays where it is** |
+| Small table | shipped once, redistributed by key hash | **full copy to every executor** |
+| Network cost | ~ size of both tables | ~ small table × number of executors |
+| Limit | none, but slow at scale | small side must fit in each executor's memory |
+
+Spark broadcasts automatically below `spark.sql.autoBroadcastJoinThreshold` (default 10 MB); above it,
+force with the `broadcast()` / `/*+ BROADCAST(t) */` hint or raise the threshold. Exam heuristic:
+"expensive shuffle" + "small dimension table" → broadcast. Repartitioning both sides is itself a
+shuffle — it makes the problem worse, not better. Two large tables cannot be broadcast.
+
 ### Setting them
 
 ```python
