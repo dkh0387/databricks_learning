@@ -233,8 +233,12 @@ Created in the UC UI under *Catalog Explorer → Policies* or via Policies API. 
 
 ### Mental model
 
-- **Manual** filters/masks → use for one-off tables.
-- **ABAC** → use for "all PII columns across the lakehouse" type rules.
+- **Dynamic view** → `is_member()` / `is_account_group_member()` logic written *inside the view definition*;
+  grant on the view, base table stays locked down. Recognize it by `CASE WHEN is_member(...)` in a `CREATE VIEW`.
+- **Manual** row filters / column masks → UDF attached *to the table itself* (`SET ROW FILTER` / `SET MASK`);
+  use for one-off tables, no extra view object.
+- **ABAC** → central policies matching on **governed tags** — use for "all PII columns across the lakehouse"
+  type rules; no per-table or per-view configuration.
 
 ## Audit logs
 

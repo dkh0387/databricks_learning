@@ -272,6 +272,12 @@ VACUUM dea_learning.silver.silver_orders RETAIN 168 HOURS;      -- explicit
 
 Lower retention than 7 days requires `spark.databricks.delta.retentionDurationCheck.enabled = false` and breaks time travel beyond that point.
 
+> Exam trap — `OPTIMIZE` vs `VACUUM` and history: `OPTIMIZE` only compacts files; the old small files
+> are *tombstoned*, not deleted, so **history and time travel stay fully intact**. Only a later `VACUUM`
+> physically deletes files older than the retention window — after that, `VERSION AS OF` /
+> `TIMESTAMP AS OF` targeting versions beyond the retention fails with a file-not-found style error.
+> "Time travel to last month suddenly fails" → the answer is `VACUUM`, never `OPTIMIZE`.
+
 ## 5. Performance tuning cheat sheet
 
 ```python
