@@ -130,13 +130,26 @@ Any non-zero spill = the executor ran low on memory and paged data to disk. Slow
 
 ### Why more shuffle partitions do NOT fix skew (exam distractor!)
 
-Shuffle placement is `hash(key) % numPartitions` — all rows of the same key hash identically and land in the **same
-partition, no matter how many partitions exist**. Raising `spark.sql.shuffle.partitions` from 200 to 2000 only
-spreads the *other* keys thinner (plus 1800 extra tiny tasks of overhead); the hot key's million rows remain one
-indivisible block, the straggler runs exactly as long as before. The fixes work on a different axis: **AQE splits
-the oversized partition after the fact**, **salting changes the key itself** (`1` → `(1, salt 0..15)` = 16 hashes =
-16 tasks), and a **broadcast join removes the shuffle entirely** (no shuffle → no skew; the realistic fix whenever
-the small side fits under the threshold).
+During a shuffle, Spark routes each row with a simple formula: `hash(key) % numPartitions`. The key is the
+only input that matters — every row with the same key produces the same hash, so **all rows of one key land in
+the same partition**. That is intentional (a join or aggregation needs all rows of a key in one place), but it
+also means a partition is exactly as big as its biggest key.
+
+Concrete example: `country = 'US'` has 1 million rows, every other country a few thousand. With 200 partitions,
+all US rows land in one partition → one task chews through 1 million rows while the other 199 finish in seconds.
+Now raise `spark.sql.shuffle.partitions` to 2000: the formula *still* sends every US row to one (different)
+partition. The small keys spread out a little thinner, you pay for 1800 extra mini-tasks — and the straggler
+still processes 1 million rows, exactly as long as before. As long as the key is the routing input, the hot key
+is an **indivisible block**; partition count cannot cut it.
+
+The real fixes each attack that assumption differently:
+
+- **AQE skew join** — keeps the routing, but detects the oversized partition at runtime and splits it into
+  several tasks after the fact.
+- **Salting** — changes the key itself: `US` becomes `(US, 0) … (US, 15)` → 16 different hash inputs → 16
+  partitions → 16 parallel tasks (the other join side is duplicated once per salt value so matches still work).
+- **Broadcast join** — removes the shuffle entirely: no routing by key, no skew. The realistic first choice
+  whenever the small side fits under the broadcast threshold.
 
 | Symptom | Diagnosis | Right knob |
 | --- | --- | --- |
