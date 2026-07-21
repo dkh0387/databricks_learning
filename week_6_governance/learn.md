@@ -259,6 +259,19 @@ Automatic for any query run on UC tables via a SQL warehouse or notebook on **DB
 
 - UI: open table in *Catalog Explorer* → *Lineage* tab → upstream / downstream graph at table and column level.
 - API: `system.access.table_lineage`, `system.access.column_lineage`.
+- Captured from **actual query runs** — a pipeline that has never executed produces no lineage. Covers
+  tables/views, notebooks, jobs, and pipelines as lineage nodes.
+
+### What lineage does NOT capture (exam nuances)
+
+- Queries on **non-UC compute** (old DBR, legacy Hive-metastore-only clusters) — nothing is recorded.
+- Reads/writes **by storage path** (`spark.read.load('s3://...')`) — only accesses via **table names** are
+  tracked; path-based access bypasses the catalog and therefore the lineage graph.
+- Column lineage is lost when a column is produced in a way the parser can't attribute (e.g., through a UDF
+  whose internals are opaque).
+- Lineage entries are **retained for 1 year** — older history ages out.
+- Visibility is permission-filtered: users only see lineage nodes for objects they have privileges on;
+  other nodes are masked.
 
 ## Delta Sharing
 
