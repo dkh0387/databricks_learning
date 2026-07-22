@@ -261,6 +261,18 @@ Constraints:
 
 Databricks runs `OPTIMIZE`, `VACUUM`, and `ANALYZE` automatically on UC managed tables — no scheduling, no DBU costs on your clusters (runs on serverless, billed separately).
 
+What each background task contributes:
+
+| Task | Effect |
+| --- | --- |
+| `OPTIMIZE` | Compacts small files → less open/close overhead, better scan throughput |
+| `VACUUM` | Deletes tombstoned files past retention → less storage cost |
+| `ANALYZE` | Collects table/column **statistics** for the cost-based query optimizer → better join ordering, broadcast decisions (knows table sizes), and file skipping via min/max values |
+
+PO also collects statistics **during writes** (not only via the background `ANALYZE`), so the optimizer
+works with fresh stats right after data lands. Exam angle: "PO makes queries faster" is not only file
+compaction — the statistics feed the query optimizer's decisions.
+
 ```sql
 -- Enable at any level (inheritance: account → catalog → schema → table)
 ALTER CATALOG dea_learning ENABLE PREDICTIVE OPTIMIZATION;
