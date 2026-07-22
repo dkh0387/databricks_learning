@@ -61,6 +61,34 @@ SELECT
 FROM bronze.orders;
 ```
 
+### `TRY_CAST` — casting dirty data without failing the batch
+
+In ANSI mode (the Databricks default) `CAST` **throws** on invalid input and aborts the whole query;
+`TRY_CAST` returns `NULL` instead and the batch keeps running:
+
+| Expression | Result |
+| --- | --- |
+| `CAST('100' AS INT)` | `100` |
+| `CAST('100$' AS INT)` | **error** (`CAST_INVALID_INPUT`) |
+| `TRY_CAST('100$' AS INT)` | **`NULL`** |
+
+```sql
+SELECT order_id,
+       TRY_CAST(amount_raw AS DOUBLE) AS amount
+FROM   bronze.orders;
+
+-- Data-quality check: which raw values were not castable?
+SELECT amount_raw FROM bronze.orders
+WHERE  TRY_CAST(amount_raw AS DOUBLE) IS NULL AND amount_raw IS NOT NULL;
+```
+
+- Whole `try_*` family with the same semantics: `try_to_timestamp`, `try_to_number`, `try_divide`
+  (no division-by-zero error), `try_element_at`, …
+- To actually *parse* `'100$'` as a number, use `to_number('100$', '999$')` with a format string
+  (or `regexp_replace` + cast).
+- Legacy twist: with ANSI mode off (`spark.sql.ansi.enabled = false`, old Spark behavior) plain
+  `CAST` silently returned `NULL` too — `TRY_CAST` exists precisely because today's default errors out.
+
 ### String hygiene
 
 `lower`, `upper`, `trim`, `ltrim`, `rtrim`, `regexp_replace`, `regexp_extract`, `initcap`.
