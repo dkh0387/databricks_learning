@@ -1,6 +1,6 @@
 # Practice Exam 3 — Databricks Certified Data Engineer Associate (May 2026 outline)
 
-45 multiple-choice questions · 90 minutes · pass target ≥ 32/45 (~70%).
+45 multiple-choice questions · 90 minutes · pass target ≥ 36/45 (80% per the official Certification FAQ).
 Question distribution mirrors the official exam guide weights (same as Practice Exams 1–2, no
 question overlap):
 
@@ -454,7 +454,7 @@ traversal rights. Which privilege enables exactly this?
 
 ## Answer key & explanations
 
-> Score yourself first: ≥ 32/45 ≈ pass level. Review the referenced repo file for every miss.
+> Score yourself first: ≥ 36/45 = pass level (80%, official Certification FAQ). Review the referenced repo file for every miss.
 
 | # | Answer | Explanation | Review |
 | --- | --- | --- | --- |
@@ -508,6 +508,6 @@ traversal rights. Which privilege enables exactly this?
 
 | Score | Meaning |
 | --- | --- |
-| ≥ 40 | Exam-ready on this material — book it |
-| 32–39 | Pass level; review every miss before the real exam |
-| < 32 | Re-study the weeks with the most misses, retake in a few days |
+| ≥ 41 | Exam-ready on this material — book it |
+| 36–40 | Pass level; review every miss before the real exam |
+| < 36 | Re-study the weeks with the most misses, retake in a few days |

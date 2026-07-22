@@ -10,7 +10,7 @@ Source: [Official Exam Guide PDF](https://www.databricks.com/sites/default/files
 | Questions | 45 multiple choice |
 | Time | 90 minutes |
 | Cost | USD 200 |
-| Pass mark | ~70% (not officially published; 32/45 is the consensus) |
+| Pass mark | **80% = 36/45** per the [official Certification FAQ](https://www.databricks.com/learn/certification/faq) (checked 2026-07-22). The exam guide PDF itself states no pass mark; Databricks notes scoring may change with exam updates. |
 | Validity | 2 years |
 | Prereqs | None; ~6 months hands-on Databricks recommended |
 | Delivery | Online proctored or test center |
@@ -150,7 +150,7 @@ Each week folder contains: `learn*.md` (theory), `glossary.md` (key terms), and 
 4. Practice exams:
    - Local: `practice_exam/practice_exam_1.md` — 45 questions matching the May-2026 outline weights, with answer key and per-question repo references.
    - Udemy practice exam pack already linked from `udemy_databricks_certified_data_engineer_associate/README.md`.
-   - Aim for ≥85% on 2 consecutive practice runs before booking.
+   - Aim for ≥90% on 2 consecutive practice runs before booking (pass mark is 80% — keep a buffer).
 5. Re-read the official sample questions in the exam guide PDF (5 worked examples at the end).
 6. Book the exam via [WebAssessor](https://webassessor.com/databricks).
 
