@@ -71,6 +71,23 @@ Databricks splits every deployment into two layers — the exam tests *where dat
   **compute plane in the customer's cloud account**. The control plane never processes data; it
   orchestrates (UI, scheduler, metadata).
 
+### Network consequence: reaching on-premises systems
+
+Where the compute runs decides which network paths it can use:
+
+- **Classic compute** is deployed into your own VNet/VPC ("VNet injection") — the cluster VMs sit in
+  your corporate network and can reuse its existing routes: Site-to-Site VPN, AWS Direct Connect,
+  Azure ExpressRoute. An on-prem database (e.g. PostgreSQL) is reachable directly via JDBC
+  (see `../week_2_ingestion/learn_deep_dive.md` §6).
+- **Serverless compute** runs in Databricks' serverless compute plane — outside your network. Your
+  VPN / Direct Connect routes simply don't exist there. NCCs (Network Connectivity Configurations)
+  solve a different problem: private connectivity to *cloud* services (storage private endpoints),
+  not a bridge into an on-prem data center.
+- Exam heuristic: "on-premises" + "VPN / Direct Connect / ExpressRoute" in the question → serverless
+  is out; the answer is classic compute in the customer network — for a scheduled job specifically
+  the **classic job cluster**. This is a third hard dependency that rules out serverless, next to
+  specific instance types and init scripts.
+
 # Compute services
 
 Exam §1 explicitly tests choosing the right compute for a workload. Four options:
