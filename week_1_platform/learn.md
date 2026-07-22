@@ -28,6 +28,19 @@
     - **External table** — metastore owns metadata only; files live at a caller-provided path.
       `DROP TABLE` does **not** delete the files.
       `CREATE TABLE tbl_name (...) USING DELTA LOCATION '<path>'`.
+    - **`USING <format>`** — picks the data source; **without it the default is Delta**. Valid formats per the
+      [official reference](https://docs.databricks.com/aws/en/sql/language-manual/sql-ref-syntax-ddl-create-table-using):
+      `AVRO, BINARYFILE, CSV, DELTA, ICEBERG, JSON, ORC, PARQUET, TEXT`. Clause order:
+      column list → `USING` → table clauses (`OPTIONS`, `LOCATION`). Exam favorite — external table over raw CSV files:
+      ```sql
+      CREATE TABLE my_table
+      (col1 STRING, col2 STRING)
+      USING CSV
+      OPTIONS (header = "true", delimiter = ";")
+      LOCATION '/path/input';
+      ```
+      `USING CSV` is mandatory here (a Delta table cannot point at raw CSV files); `OPTIONS` configures parsing.
+      Result is a non-Delta external table: no ACID, no time travel, no MERGE — just a table mapping over the files.
 - **Delta Tables:** any table (managed or external) stored in the Delta Lake format. Adds ACID transactions, time
   travel, schema evolution, etc.
     - Creating:
