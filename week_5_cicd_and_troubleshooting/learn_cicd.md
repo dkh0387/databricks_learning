@@ -241,6 +241,22 @@ databricks bundle sync                       # one-way file sync for local-IDE d
 databricks bundle generate job --existing-job-id 123   # reverse-engineer YAML from UI-created job
 ```
 
+### Non-interactive runs (CI/CD): `--auto-approve`
+
+`deploy` and `destroy` can stop and ask for confirmation when the change is destructive — e.g. a
+pipeline or volume must be deleted/recreated because its definition changed incompatibly. In a CI
+runner nobody types "y", so the pipeline would hang. `--auto-approve` skips these prompts:
+
+```bash
+databricks bundle deploy  -t prod --auto-approve
+databricks bundle destroy -t dev  --auto-approve
+```
+
+Together with service-principal env-var auth (`DATABRICKS_HOST` / `DATABRICKS_CLIENT_ID` /
+`DATABRICKS_CLIENT_SECRET`, see §7) this makes the run fully non-interactive — the documented CI/CD
+setup. Distractor to know: `--force` is about overriding the deployment **lock**, not about skipping
+confirmation prompts.
+
 ### Typical local loop
 
 ```bash
