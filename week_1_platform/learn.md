@@ -153,3 +153,13 @@ Decision shortcuts the exam likes:
           `CREATE TABLE tbl_name CLUSTER BY AUTO`
         - Change keys later with `ALTER TABLE tbl_name CLUSTER BY (...)` followed by `OPTIMIZE tbl_name FULL`
           to rewrite the layout.
+- **Maintenance — `OPTIMIZE` vs `VACUUM`:**
+    - `OPTIMIZE tbl_name`: compacts small files into larger ones (~1 GB target). The replaced files are only
+      *tombstoned* (dereferenced in the Delta log), **not deleted** — history and time travel stay intact.
+    - `VACUUM tbl_name [RETAIN n HOURS]`: **physically deletes** the data files of earlier table versions once
+      they are older than the retention window (default 7 days). After a VACUUM, **time travel to those earlier
+      versions is gone** — `VERSION AS OF` / `TIMESTAMP AS OF` beyond the retention fails with a
+      file-not-found style error. The version *entries* may still appear in `DESCRIBE HISTORY`, but their data
+      files no longer exist.
+    - Exam heuristic: "time travel to last month suddenly fails" → `VACUUM`, never `OPTIMIZE`.
+      Deep dive: `../week_5_cicd_and_troubleshooting/learn_troubleshooting.md` (VACUUM section).

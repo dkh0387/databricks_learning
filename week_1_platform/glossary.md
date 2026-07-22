@@ -30,7 +30,8 @@
 | **Deep clone** | Full data copy of a Delta table (slow, independent). |
 | **Shallow clone** | Metadata-only clone that references source files (fast, dependent on source lifecycle). |
 | **Time travel** | Querying a Delta table at a prior version (`VERSION AS OF n`) or timestamp (`TIMESTAMP AS OF '…'`). |
-| **OPTIMIZE** | Compacts small Delta files into larger ones (default ~1 GB target). |
+| **OPTIMIZE** | Compacts small Delta files into larger ones (default ~1 GB target). Old files are tombstoned, not deleted — history stays. |
+| **VACUUM** | Physically deletes data files of earlier table versions past the retention window (default 7 days) — time travel to those versions is gone afterwards. |
 | **Z-Order** | Multi-dim file layout on high-cardinality cols. Legacy — Liquid Clustering replaces it. |
 | **Liquid Clustering** | Incremental, adaptive clustering (`CLUSTER BY (cols)` or `CLUSTER BY AUTO`). |
 | **Predictive Optimization** | Auto runs `OPTIMIZE`, `VACUUM`, `ANALYZE` on UC managed Delta tables on serverless. |
