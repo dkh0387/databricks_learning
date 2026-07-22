@@ -303,12 +303,28 @@ Note: predictive `OPTIMIZE` does **not** run `ZORDER` — use Liquid Clustering 
 
 ### `VACUUM` — remove tombstoned files
 
+Physically deletes files older than the retention threshold from the table directory
+([official reference](https://docs.databricks.com/aws/en/sql/language-manual/delta-vacuum)) — two categories:
+data files **no longer referenced** by the latest table state (tombstoned by UPDATE/DELETE/MERGE/OPTIMIZE),
+and **uncommitted** leftovers of aborted writes.
+
 ```sql
 VACUUM dea_learning.silver.silver_orders;                       -- default 7 day retention
 VACUUM dea_learning.silver.silver_orders RETAIN 168 HOURS;      -- explicit
+VACUUM dea_learning.silver.silver_orders DRY RUN;               -- list up to 1,000 candidates, delete nothing
+
+-- per-table default instead of RETAIN:
+ALTER TABLE dea_learning.silver.silver_orders
+  SET TBLPROPERTIES ('delta.deletedFileRetentionDuration' = '30 days');
 ```
 
-Lower retention than 7 days requires `spark.databricks.delta.retentionDurationCheck.enabled = false` and breaks time travel beyond that point.
+- `FULL` (default) also removes unreferenced files found in the directory; `LITE` works from the
+  transaction log only (faster, but fails if the log was already pruned).
+- Never touches directories starting with `_` — including `_delta_log`. The commit *history* stays,
+  only the data files go: `DESCRIBE HISTORY` can list versions that are no longer readable.
+- Lower retention than 7 days requires `spark.databricks.delta.retentionDurationCheck.enabled = false`
+  and breaks time travel beyond that point. The check exists to protect files that a still-running
+  job (long reader, in-flight writer) may need — disable only when nothing runs longer than the retention.
 
 > Exam trap — `OPTIMIZE` vs `VACUUM` and history: `OPTIMIZE` only compacts files; the old small files
 > are *tombstoned*, not deleted, so **history and time travel stay fully intact**. Only a later `VACUUM`
