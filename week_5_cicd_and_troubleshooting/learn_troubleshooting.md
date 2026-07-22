@@ -159,7 +159,20 @@ The real fixes each attack that assumption differently:
 
 ### AQE — Adaptive Query Execution
 
-Runtime re-optimization based on observed shuffle stats. Default-on in DBR 7.3+. Key knobs (Python, runtime-settable):
+Runtime re-optimization based on observed shuffle stats. Default-on in DBR 7.3+. Three headline features:
+
+1. **Partition coalescing** — merge tiny post-shuffle partitions.
+2. **Skew-join handling** — split oversized partitions into several tasks.
+3. **Join-strategy switching** — convert a planned sort-merge join to a **broadcast join at runtime**
+   when a side's *actual* shuffle output is small. The static planner only sees *estimates*; after a
+   selective filter a "5 GB" table may really be 8 MB — AQE observes that after the shuffle stage and
+   converts. Runtime threshold: `spark.sql.adaptive.autoBroadcastJoinThreshold` (separate from the
+   static one). The local shuffle reader makes this cheap: executors read their own shuffle blocks
+   locally instead of exchanging them over the network. Limit: AQE reacts *after* the shuffle stage
+   materialized — a correctly planned broadcast (fresh stats via `ANALYZE`/PO, or an explicit hint)
+   avoids the shuffle entirely.
+
+Key knobs (Python, runtime-settable):
 
 ```python
 spark.conf.set("spark.sql.adaptive.enabled", True)                       # master switch
