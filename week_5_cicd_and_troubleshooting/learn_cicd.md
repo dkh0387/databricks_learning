@@ -254,8 +254,17 @@ databricks bundle destroy -t dev  --auto-approve
 
 Together with service-principal env-var auth (`DATABRICKS_HOST` / `DATABRICKS_CLIENT_ID` /
 `DATABRICKS_CLIENT_SECRET`, see §7) this makes the run fully non-interactive — the documented CI/CD
-setup. Distractor to know: `--force` is about overriding the deployment **lock**, not about skipping
-confirmation prompts.
+setup.
+
+Related deploy flags, per the
+[official CLI reference](https://docs.databricks.com/aws/en/dev-tools/cli/bundle-commands):
+
+| Flag | Official description |
+| --- | --- |
+| `--fail-on-active-runs` | "Fail if there are running jobs or pipelines in the deployment" — abort instead of overwriting active workloads |
+| `--auto-approve` | "Skip interactive approvals that might be required for deployment" |
+| `--force` | "Force-override **Git branch validation**" (NOT the lock — common distractor) |
+| `--force-lock` | Force acquisition of the **deployment lock** — only after a crashed deployment left a stale lock |
 
 ### Typical local loop
 
