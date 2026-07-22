@@ -26,6 +26,21 @@ The exam tests this in scenario form ("which ingestion approach should the engin
 - **Governance need** → must land in UC: any of the above EXCEPT manual upload to DBFS.
 - **Schema evolution expected** → Auto Loader (only option with built-in evolution modes).
 
+### "Create or modify a table using file upload" UI — the local-files path
+
+The manual-upload row above in detail
+([official page](https://docs.databricks.com/aws/en/ingestion/create-or-modify-table)): drag-and-drop
+local files in the UI to create or overwrite/append to a UC table. Exam-relevant knobs:
+
+- **"Automatically detect column types"** (Advanced attributes) — **on by default**: scans the data and
+  infers INT/BOOLEAN/DATE/… . **Toggled off, every column becomes STRING.** Turning it off is the safe
+  play for messy source data: a string load never fails on type conflicts; convert deliberately in
+  silver afterwards (`TRY_CAST`, see week 3).
+- Same philosophy as Auto Loader inference — just inverted defaults: Auto Loader infers untyped
+  formats as all-STRING *unless* you enable `cloudFiles.inferColumnTypes`; the upload UI infers types
+  *unless* you disable detection. Either way: **STRING is the safe fallback for dirty data.**
+- **5 GB per-file UI limit** — larger files go via volumes / SDK, not the upload dialog.
+
 ## 2. `COPY INTO` — mechanics worth remembering
 
 ```sql
