@@ -85,12 +85,33 @@ Exam §1 explicitly tests choosing the right compute for a workload. Four option
 > Legacy note: **High Concurrency clusters** (multi-user clusters with process isolation) are a legacy option,
 > superseded by clusters with **shared access mode** and by **SQL warehouses** for concurrent SQL workloads.
 
+### Alternative names you'll meet in exam questions
+
+| Exam/legacy term | Means |
+| --- | --- |
+| **Interactive compute / interactive cluster** | = all-purpose compute (older name; "automated cluster" was the old name for job clusters) |
+| **Serverless job compute** | = serverless compute *for jobs* — Databricks names serverless per workload type: for jobs / for notebooks / for pipelines, plus serverless SQL warehouses |
+
+### Instance pools
+
+A pool keeps **pre-warmed, ready-to-run cloud VMs** that classic clusters (all-purpose *and* job) draw
+from at startup and when autoscaling. Effect: the 3–6 min cluster start shrinks drastically because the
+cloud-provider VM provisioning step disappears.
+
+- Cost mechanics (favorite exam angle): **idle instances in the pool incur no DBUs** — only the cloud
+  VM cost keeps running. You trade cloud infrastructure cost for start speed.
+- Serverless vs pools: both attack slow cluster starts — serverless by letting Databricks own the
+  compute entirely, pools by pre-warming *your own* VMs. Pools only make sense for classic compute;
+  with serverless there is nothing to pre-warm.
+- Exam pattern: "classic job clusters start too slowly, serverless is not an option" → **instance pool**.
+
 Decision shortcuts the exam likes:
 - "Need fast startup for an ad-hoc query by an analyst" → **Serverless SQL warehouse**.
 - "Scheduled nightly ETL job, cost-sensitive" → **Job cluster** (or serverless jobs if available).
 - "Notebook development, lots of iteration on one dataset" → **All-purpose cluster** (or serverless notebooks).
 - "Lakeflow Declarative Pipeline" → defaults to **serverless** — recommended.
 - "Many concurrent users running short SQL queries" → **Serverless SQL warehouse with autoscaling**.
+- "Classic clusters must start faster; serverless not possible" → **Instance pool**.
 
 # Delta Lake Basics
 

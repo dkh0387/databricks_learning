@@ -20,8 +20,9 @@
 | **DBFS** | Databricks File System abstraction. The **DBFS root** (`dbfs:/`) is deprecated for new content — use UC Volumes (`/Volumes/...`). DBFS mounts to external storage still work but are also superseded by UC external locations. |
 | **DBR** | Databricks Runtime — the Spark/Photon version on a cluster. |
 | **DBU** | Databricks Unit — the billing unit for compute (rate varies by workload). |
-| **All-purpose cluster** | Interactive cluster for ad-hoc work; higher DBU rate. |
-| **Job cluster** | Ephemeral cluster created per job run; lower Jobs Compute DBU rate. |
+| **All-purpose cluster** | Interactive cluster for ad-hoc work; higher DBU rate. Older exam term: "interactive compute/cluster". |
+| **Job cluster** | Ephemeral cluster created per job run; lower Jobs Compute DBU rate. Older exam term: "automated cluster". |
+| **Instance pool** | Pre-warmed idle cloud VMs that classic clusters draw from — cuts cluster startup time. Idle pool instances cost no DBUs, only cloud VM cost. |
 | **SQL warehouse** | Compute for SQL/BI workloads; serverless option available. |
 | **Serverless compute** | Fully managed compute — no cluster startup, infra cost bundled into DBU. |
 | **Photon** | Vectorized C++ engine; toggle at cluster level for SQL/DataFrame speedups. Free on serverless. |
