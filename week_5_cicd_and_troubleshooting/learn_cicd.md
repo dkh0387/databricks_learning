@@ -14,7 +14,7 @@ Source files and docs still say "Asset Bundles" and `databricks bundle …` — 
 
 ## 1. Databricks Git Folders
 
-Per-user or shared folders inside the workspace, backed by a remote Git repo. Lets you treat notebooks/files as code, branch, commit, push, and open PRs without leaving Databricks.
+Per-user or shared folders inside the workspace, backed by a remote Git repo. Lets you treat notebooks/files as code: branch, commit, push, pull — all natively in the UI. **PR creation and code review are NOT native**: the "Create pull request" button is just a deep link that opens the Git provider's PR page; creating, reviewing, approving, and merging PRs all happen in the provider (classic exam statement).
 
 ### Setup
 
