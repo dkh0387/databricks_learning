@@ -23,12 +23,12 @@ USE CATALOG dea_learning;
 CREATE OR REPLACE FUNCTION sec.region_filter(region STRING)
 RETURNS BOOLEAN
 RETURN
-  IS_ACCOUNT_GROUP_MEMBER('admins')
-  OR (IS_ACCOUNT_GROUP_MEMBER('eu_team')    AND region = 'EU')
-  OR (IS_ACCOUNT_GROUP_MEMBER('na_team')    AND region = 'NA')
-  OR (IS_ACCOUNT_GROUP_MEMBER('apac_team')  AND region = 'APAC')
-  OR (IS_ACCOUNT_GROUP_MEMBER('latam_team') AND region = 'LATAM')
-  OR (IS_ACCOUNT_GROUP_MEMBER('emea_team')  AND region = 'EMEA');
+  is_account_group_member('admins')
+  OR (is_account_group_member('eu_team')    AND region = 'EU')
+  OR (is_account_group_member('na_team')    AND region = 'NA')
+  OR (is_account_group_member('apac_team')  AND region = 'APAC')
+  OR (is_account_group_member('latam_team') AND region = 'LATAM')
+  OR (is_account_group_member('emea_team')  AND region = 'EMEA');
   -- 'OTHER' is admin-only by design (no team owns it).
 
 ALTER TABLE silver.customers_silver
@@ -46,7 +46,7 @@ CREATE OR REPLACE FUNCTION sec.mask_email(email STRING)
 RETURNS STRING
 RETURN
   CASE
-    WHEN IS_ACCOUNT_GROUP_MEMBER('pii_readers') THEN email
+    WHEN is_account_group_member('pii_readers') THEN email
     ELSE regexp_replace(email, '(^.)(.*)(@.*$)', '$1***$3')
   END;
 

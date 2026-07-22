@@ -63,8 +63,10 @@
 - **CI/CD adaption:** standard in software development, highly adapted in data engineering
 - **CI:**
     - merging code changes into a repository and running automated tests
-    - branch strategy: feature branching (longer living feature branches), trunk-based development (frequent merges to
-      the main branch)
+    - branch strategy — the distinguishing axis is branch **lifetime**, not whether branches exist:
+      trunk-based development (short-lived branches, merged to `main` within hours–days; CI-friendly, recommended)
+      vs. long-lived feature branching / GitFlow (feature branches or a `develop` line live for weeks;
+      late integration, only for slow versioned release cadences)
     - _Benefits:_
         - Early detection of bugs
         - Faster delivery

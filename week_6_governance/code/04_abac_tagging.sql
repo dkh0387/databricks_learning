@@ -32,21 +32,49 @@ WHERE  catalog_name = 'dea_learning';
 -- COMMAND ----------
 
 -- MAGIC %md
--- MAGIC ### Create the ABAC policy in the UI
--- MAGIC 1. **Catalog Explorer → Policies → Create policy**.
--- MAGIC 2. **Type:** *Column mask*.
--- MAGIC 3. **Condition:** column has tag `pii=true`.
--- MAGIC 4. **Action:** apply UDF `dea_learning.sec.mask_email` (defined in `03_row_filter_column_mask.sql`).
--- MAGIC 5. **Principals:** all users EXCEPT group `pii_readers`.
--- MAGIC 6. Save.
--- MAGIC
--- MAGIC From that moment, every existing and future column tagged `pii=true` in `dea_learning` gets masked
--- MAGIC automatically. Drop the manual `ALTER TABLE … SET MASK` from `03_row_filter_column_mask.sql` — ABAC replaces it.
+-- MAGIC ### Create the ABAC policies — SQL (`CREATE POLICY`)
+-- MAGIC The tags above are only labels until a policy matches on them. Alternative to SQL:
+-- MAGIC **Catalog Explorer → Policies → Create policy** builds the same thing in the UI.
+
+-- COMMAND ----------
+
+-- 4. Column-mask policy: mask every pii-tagged column for everyone except pii_readers.
+-- Who sees clear text is decided by the POLICY (TO ... EXCEPT ...): for pii_readers the
+-- policy simply does not apply and the UDF is never invoked. The UDF therefore shrinks to a
+-- pure transformation — value in, masked value out — unlike sec.mask_email from
+-- 03_row_filter_column_mask.sql, which still carries its own is_account_group_member() check
+-- because in the manual setup the UDF is the only place where the audience can be decided.
+CREATE OR REPLACE FUNCTION sec.mask_email_value(email STRING)
+RETURNS STRING
+RETURN regexp_replace(email, '(^.)(.*)(@.*$)', '$1***$3');
+
+CREATE OR REPLACE POLICY mask_pii
+ON SCHEMA silver
+COMMENT 'Mask every pii-tagged column for non-privileged users'
+COLUMN MASK sec.mask_email_value
+TO `account users` EXCEPT `pii_readers`
+FOR TABLES
+MATCH COLUMNS has_tag_value('pii', 'true') AS pii_col
+ON COLUMN pii_col;
+
+-- 5. Row-filter policy: on tables tagged domain=customers, apply region_filter,
+-- binding the UDF argument to the column that carries the region tag.
+ALTER TABLE silver.customers_silver
+  ALTER COLUMN region SET TAGS ('region_col' = 'true');
+
+CREATE OR REPLACE POLICY hide_regions
+ON SCHEMA silver
+COMMENT 'Region-filter all customer-domain tables'
+ROW FILTER sec.region_filter
+TO `account users` EXCEPT `admins`
+FOR TABLES
+WHEN has_tag_value('domain', 'customers')
+MATCH COLUMNS has_tag('region_col') AS r
+USING COLUMNS (r);
 
 -- COMMAND ----------
 
 -- MAGIC %md
--- MAGIC ### Row-level ABAC policy
--- MAGIC 1. Tag tables with their domain: `domain=customers` (already done above).
--- MAGIC 2. Create a *Row filter* policy: when `domain=customers`, apply UDF `region_filter` on column `region`.
--- MAGIC 3. The UDF reads the row's `region` value and decides if the caller is allowed to see it.
+-- MAGIC From that moment, every existing and future column tagged `pii=true` in the schema gets masked and
+-- MAGIC every `domain=customers` table gets row-filtered — automatically, no per-table `ALTER`.
+-- MAGIC Drop the manual `ALTER TABLE … SET MASK` / `SET ROW FILTER` from `03_row_filter_column_mask.sql` — ABAC replaces both.

@@ -370,8 +370,11 @@ DATABRICKS_CLIENT_SECRET="<sp-secret>"
 
 ## 8. Branch strategy that pairs with DAB
 
-- **Trunk-based**: feature branch → PR to `main` → auto-deploy to `staging` → manual promote to `prod`. Recommended.
-- **GitFlow**: heavier, more branches; prefer only if release cadence is monthly+.
+- **Trunk-based**: **short-lived** feature branch (hours–days) → PR to `main` → auto-deploy to `staging` → manual
+  promote to `prod`. Recommended. The branches are just the vehicle — the defining trait is that everyone
+  integrates into `main` frequently and `main` is always deployable.
+- **GitFlow**: two long-lived branches (`main` + `develop`) plus feature/release/hotfix branches; prefer only if
+  release cadence is monthly+ and versions must be maintained in parallel.
 - One `target` per long-lived environment. Short-lived "feature target" (`dev_alice`) is fine — `mode: development` makes them isolated.
 
 ## 9. Exam-day quick reference

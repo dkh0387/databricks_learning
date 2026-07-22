@@ -122,6 +122,30 @@ SELECT * FROM a EXCEPT    SELECT * FROM b;
 | `broadcast` | Right side is small (< few hundred MB) |
 | `cross` | All combinations (rare; expensive) |
 
+### NULL semantics in join conditions — `=` vs `<=>` vs `<>`
+
+`NULL = NULL` evaluates to `NULL`, not `TRUE` — so rows whose join key is NULL **never match**, not even
+each other, and silently disappear from an inner join. The null-safe equality operator `<=>`
+(= standard SQL `IS NOT DISTINCT FROM`; PySpark: `a.region.eqNullSafe(b.region)`) treats NULL as a
+regular value:
+
+| Expression | `=` | `<=>` |
+| --- | --- | --- |
+| `1 = 1` | TRUE | TRUE |
+| `NULL = NULL` | **NULL** (no match) | **TRUE** (match) |
+| `NULL = 5` | NULL | FALSE |
+
+```sql
+SELECT * FROM a JOIN b ON a.region <=> b.region;   -- NULL keys match each other
+```
+
+- `<=>` stays an **equi-join** for the optimizer — hash and broadcast joins work normally.
+- Typical uses: `MERGE INTO` match conditions with nullable keys, and change detection —
+  `old.col <> new.col` misses transitions from/to NULL; `NOT (old.col <=> new.col)` doesn't.
+- `<>` / `!=` in a join condition creates a *non-equi join*: not hashable, effectively a cross
+  product with a filter — expensive on large tables. And the same NULL trap applies
+  (`NULL <> x` → NULL → row dropped).
+
 ## 4. Column, row, and structure manipulation
 
 ### Add / drop / rename / split

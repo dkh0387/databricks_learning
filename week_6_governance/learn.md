@@ -127,6 +127,33 @@ To read `dea_learning.silver.silver_orders` a user needs:
 `USE CATALOG` on `dea_learning` **and** `USE SCHEMA` on `dea_learning.silver` **and** `SELECT` on the table.
 Privileges granted on a parent **inherit downward** — `SELECT` on a schema applies to all current *and future* tables in it — but the `USE CATALOG` / `USE SCHEMA` traversal privileges are still required to reach the object.
 
+### Privileges for `SELECT * FROM read_files('<path>')`
+
+`read_files()` reads **raw files by path**, not a table — so `SELECT` (a table/view privilege) plays no role.
+Which privileges apply depends on *where the path lives*:
+
+| Path | Required privileges |
+| --- | --- |
+| UC volume: `/Volumes/dea_learning/raw/landing/...` | `USE CATALOG` on `dea_learning` + `USE SCHEMA` on `raw` + **`READ VOLUME`** on the volume |
+| External location: `s3://corp-data/sales/...` | **`READ FILES`** on the external location covering the path |
+
+```sql
+-- Files in a volume — traversal + READ VOLUME
+GRANT USE CATALOG  ON CATALOG dea_learning     TO `analysts`;
+GRANT USE SCHEMA   ON SCHEMA  dea_learning.raw TO `analysts`;
+GRANT READ VOLUME  ON VOLUME  dea_learning.raw.landing TO `analysts`;
+SELECT * FROM read_files('/Volumes/dea_learning/raw/landing/orders/', format => 'csv');
+
+-- Files under an external location — no USE CATALOG / USE SCHEMA needed:
+-- external locations are metastore-level securables, they don't live inside a catalog/schema
+GRANT READ FILES ON EXTERNAL LOCATION sales_landing TO `analysts`;
+SELECT * FROM read_files('s3://corp-data/sales/2026/', format => 'json');
+```
+
+Same pairing for writes: `WRITE VOLUME` on volumes, `WRITE FILES` on external locations.
+Exam pattern: "user has `SELECT` on every table but `read_files` on the volume fails" → the missing
+privilege is `READ VOLUME` (files ≠ tables; each securable has its own read privilege).
+
 ### `GRANT` / `REVOKE`
 
 ```sql
@@ -165,9 +192,9 @@ Both are SQL UDFs attached to a table. The examples below use week 3's plain Del
 CREATE FUNCTION dea_learning.sec.region_filter(region STRING)
 RETURNS BOOLEAN
 RETURN
-  IS_ACCOUNT_GROUP_MEMBER('admins')
-  OR (IS_ACCOUNT_GROUP_MEMBER('eu_team') AND region = 'EU')
-  OR (IS_ACCOUNT_GROUP_MEMBER('us_team') AND region = 'US');
+  is_account_group_member('admins')
+  OR (is_account_group_member('eu_team') AND region = 'EU')
+  OR (is_account_group_member('us_team') AND region = 'US');
 
 ALTER TABLE dea_learning.silver.customers_silver
   SET ROW FILTER dea_learning.sec.region_filter ON (region);
@@ -182,7 +209,7 @@ ALTER TABLE dea_learning.silver.customers_silver DROP ROW FILTER;
 CREATE FUNCTION dea_learning.sec.mask_email(email STRING)
 RETURNS STRING
 RETURN
-  CASE WHEN IS_ACCOUNT_GROUP_MEMBER('pii_readers') THEN email
+  CASE WHEN is_account_group_member('pii_readers') THEN email
        ELSE regexp_replace(email, '(^.)(.*)(@.*$)', '$1***$3') END;
 
 ALTER TABLE dea_learning.silver.customers_silver
@@ -229,7 +256,44 @@ ALTER TABLE dea_learning.silver.customers_silver
 2. **Principal** — who is exempt / restricted.
 3. **Action** — column mask UDF or row filter UDF to apply.
 
-Created in the UC UI under *Catalog Explorer → Policies* or via Policies API. Once created, every existing and future column with `pii=true` automatically gets the mask — no per-table `ALTER` needed.
+### Policies in SQL — using the tags set above
+
+`CREATE POLICY` closes the loop: the tag from the previous section is what the policy matches on.
+
+```sql
+-- Column mask: every column tagged pii=true in the schema gets masked,
+-- for everyone except pii_readers. New tagged columns are covered automatically.
+CREATE OR REPLACE POLICY mask_pii
+ON SCHEMA dea_learning.silver
+COMMENT 'Mask every pii-tagged column for non-privileged users'
+COLUMN MASK dea_learning.sec.mask_email
+TO `account users` EXCEPT `pii_readers`
+FOR TABLES
+MATCH COLUMNS has_tag_value('pii', 'true') AS pii_col
+ON COLUMN pii_col;
+
+-- Row filter: applies the filter UDF to tables tagged as restricted,
+-- binding the UDF argument to whichever column carries the region tag.
+CREATE OR REPLACE POLICY hide_regions
+ON SCHEMA dea_learning.silver
+COMMENT 'Region-filter all restricted tables'
+ROW FILTER dea_learning.sec.region_filter
+TO `account users` EXCEPT `admins`
+FOR TABLES
+WHEN has_tag_value('classification', 'restricted')
+MATCH COLUMNS has_tag('region_col') AS r
+USING COLUMNS (r);
+```
+
+- `MATCH COLUMNS <tag condition> AS <alias>` finds the target column(s) by tag; `ON COLUMN` (mask) points at the alias, `USING COLUMNS` passes it as the UDF argument.
+- `WHEN` optionally gates the whole policy on a table-level tag.
+- `TO ... EXCEPT ...` does the audience gating: for exempt principals the policy does not apply and the UDF is
+  never invoked. A simple on/off mask UDF therefore shrinks to a pure transformation (value in, masked value
+  out — no `is_account_group_member()`). Group checks *inside* the UDF remain only when the logic itself varies
+  by group (e.g. `region_filter`: which team sees which region is per-row logic that `TO`/`EXCEPT` cannot express).
+- Alternative without SQL: UC UI under *Catalog Explorer → Policies*, or the Policies API.
+
+Once created, every existing and future column with `pii=true` automatically gets the mask — no per-table `ALTER` needed.
 
 ### Mental model
 
@@ -278,7 +342,7 @@ Automatic for any query run on UC tables via a SQL warehouse or notebook on **DB
 Open protocol for read-only data sharing across orgs, clouds, regions — no data copy.
 
 ```sql
--- Outbound (provider side)
+-- Outbound (provider side creates share container and to whom to be shared)
 CREATE SHARE finance_share;
 ALTER SHARE finance_share ADD TABLE  dea_learning.silver.silver_orders;
 ALTER SHARE finance_share ADD SCHEMA dea_learning.gold;   -- schema-level: future objects too
@@ -288,7 +352,7 @@ ALTER SHARE finance_share ADD SCHEMA dea_learning.gold;   -- schema-level: futur
 CREATE RECIPIENT partner_acme USING ID 'azure:eastus:abc-123';
 GRANT SELECT ON SHARE finance_share TO RECIPIENT partner_acme;
 
--- Inbound (recipient side, if recipient is also UC)
+-- Inbound (recipient side, if recipient is also UC, creates from who share is coming)
 CREATE PROVIDER acme USING JSON '<credentials>';
 CREATE CATALOG acme_data USING SHARE acme.finance_share;
 ```
@@ -330,7 +394,7 @@ SELECT * FROM system.information_schema.table_privileges;
 - `SET MANAGED` converts external → managed without downtime (DBR 17.3 LTS+). `UNSET MANAGED` (no location clause) rolls it back within 14 days.
 - Row filter = UDF returns `BOOLEAN`. Column mask = UDF returns same/castable type.
 - Manual filters/masks = per table. ABAC = tag once, applies everywhere.
-- `IS_ACCOUNT_GROUP_MEMBER('grp')` is the canonical check inside filter/mask UDFs.
+- `is_account_group_member('grp')` is the canonical check inside filter/mask UDFs.
 - Audit, lineage, table_lineage, column_lineage all live in `system.access.*`.
 - Delta Sharing is read-only, supports open and D2D modes.
 

@@ -34,7 +34,7 @@
 | **Ownership** | Securable owner has implicit management rights. Transfer with `ALTER … OWNER TO`. |
 | **Row filter** | SQL UDF returning BOOLEAN — rows where false are dropped. Attached via `ALTER TABLE … SET ROW FILTER`. |
 | **Column mask** | SQL UDF transforming a value at read time. Attached via `ALTER TABLE … ALTER COLUMN … SET MASK`. |
-| **`IS_ACCOUNT_GROUP_MEMBER`** | Built-in function used inside filter/mask UDFs to gate by group. |
+| **`is_account_group_member()`** | Built-in function used inside filter/mask UDFs and dynamic views to gate by group (SQL function names are case-insensitive; docs use lowercase). |
 | **`current_user()`** | Built-in identifying the running principal. |
 | **ABAC** | Attribute-Based Access Control — tag-driven policies that mass-apply row filters/column masks. |
 | **Governed tag** | Account-level key or key:value vocabulary attached to catalogs/schemas/tables/columns. |

@@ -6,8 +6,9 @@
 | --- | --- |
 | **CI** | Continuous Integration — automated build/test on every commit. |
 | **CD** | Continuous Delivery/Deployment — automated promotion to environments. |
-| **Trunk-based development** | Short-lived branches frequently merged to `main`. Recommended for DAB. |
-| **Feature branching** | Longer-lived branches per feature. Heavier process. |
+| **Trunk-based development** | **Short-lived** branches (hours–days) merged to `main` frequently; `main` stays always releasable. Branches exist — the defining trait is how quickly they merge, not their absence. Recommended for DAB. |
+| **Feature branching (long-lived)** | Branches live for weeks per feature → late, painful integration. Opposite of trunk-based in branch *lifetime*, not in the use of branches. |
+| **GitFlow** | Two long-lived branches (`main` + `develop`) plus feature/release/hotfix branches. Heavy; suited to slow, versioned release cadences. |
 | **PAT** | Personal Access Token used for Git ↔ Databricks auth. |
 | **Service Principal** | Non-human identity for CI/CD and prod jobs. |
 | **Databricks Git Folder** | Workspace folder backed by a remote Git repo (formerly "Databricks Repos"). |
