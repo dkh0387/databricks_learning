@@ -44,7 +44,11 @@
 - **Delta Tables:** any table (managed or external) stored in the Delta Lake format. Adds ACID transactions, time
   travel, schema evolution, etc.
     - Creating:
-        - CTAS: `CREATE TABLE tbl_name AS SELECT ... FROM ...`
+        - CTAS: `CREATE TABLE tbl_name AS SELECT ... FROM ...` — creates **and populates** in one
+          statement. The schema is **derived from the query**; a manual column list is not allowed
+          (official rule: "When you specify a query you must not also specify a table_specification").
+          Need type control anyway? Cast inside the SELECT (`CAST`/`TRY_CAST`), or create the table
+          with a schema first and load it via `INSERT` / `COPY INTO` (which requires an existing table).
     - Cloning:
         - DEEP CLONE (full data copy, slow, independent of source after clone):
           `CREATE TABLE tbl_clone_name DEEP CLONE source_tbl_name`
