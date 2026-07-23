@@ -299,7 +299,11 @@ DESCRIBE EXTENDED dea_learning.silver.silver_orders;
 Excluded: external tables, Delta Sharing recipient tables, Hive metastore tables.
 Required: Premium plan, UC managed Delta table, account-level PO enablement.
 PO uses its own serverless compute to run the work — the runtime that wrote the table is not the constraint.
-Note: predictive `OPTIMIZE` does **not** run `ZORDER` — use Liquid Clustering instead.
+Note: predictive `OPTIMIZE` does **not** run `ZORDER` — and on tables that use Z-order it even
+**ignores the Z-ordered files** (skips them during compaction so the manual sort layout isn't
+destroyed; official wording: "On tables that use Z-order, predictive optimization ignores Z-ordered
+files"). Z-ordering therefore stays a manual `OPTIMIZE ... ZORDER BY` chore — or switch to Liquid
+Clustering, which PO plays along with.
 
 ### `VACUUM` — remove tombstoned files
 
