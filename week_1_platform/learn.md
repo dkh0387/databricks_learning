@@ -115,6 +115,23 @@ Exam §1 explicitly tests choosing the right compute for a workload. Four option
 > Legacy note: **High Concurrency clusters** (multi-user clusters with process isolation) are a legacy option,
 > superseded by clusters with **shared access mode** and by **SQL warehouses** for concurrent SQL workloads.
 
+### Access modes & Unity Catalog
+
+To read/write UC-governed tables, classic clusters must run a UC-capable **access mode**
+([reference](https://docs.databricks.com/aws/en/compute/access-mode-limitations)); SQL warehouses
+support UC by default, serverless is always UC-capable.
+
+| Access mode | Formerly | Users | Unity Catalog |
+| --- | --- | --- | --- |
+| **Standard** | "Shared" | Multiple, isolated from each other | ✅ recommended default for all workloads |
+| **Dedicated** | "Single user" | One user or group | ✅ (see caveat below) |
+| **No isolation shared** | — | Multiple, no isolation | ❌ **cannot access UC data at all** — classic exam distractor |
+
+- Exam pattern: "cluster can't read a UC table despite correct grants" → check the access mode
+  (No isolation shared / legacy credential passthrough don't support UC).
+- Dedicated caveat: on DBR ≤ 15.3 dedicated compute **cannot read tables with row filters / column
+  masks or dynamic views** (fine-grained access control needs DBR 15.4+). Ties into week 6 security.
+
 ### Alternative names you'll meet in exam questions
 
 | Exam/legacy term | Means |
