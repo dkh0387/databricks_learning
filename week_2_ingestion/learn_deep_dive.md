@@ -346,6 +346,27 @@ dbutils.secrets.get(scope="ops", key="pg_pwd")
 
 Scope creation requires admin: `databricks secrets create-scope ops`.
 
+### Kafka as a streaming source
+
+The standard-connector answer for event streams (clickstream, IoT) with **sub-minute latency at high
+throughput** — file-based ingestion (`COPY INTO`, Auto Loader) and batch JDBC can't meet that SLA.
+Official syntax ([Kafka streaming docs](https://docs.databricks.com/aws/en/connect/streaming/kafka)):
+
+```python
+df = (spark.readStream
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "<server:ip>")   # required
+  .option("subscribe", "<topic>")                     # or subscribePattern / assign — exactly one
+  .option("startingOffsets", "latest")                # "latest" = only new events; "earliest" = backfill
+  .load())
+```
+
+- **Records arrive binary**: schema is `key`/`value` (binary) + `topic`, `partition`, `offset`,
+  `timestamp`. Deserialize explicitly — `CAST(value AS STRING)` then `from_json(...)` (or `from_avro`).
+  Selecting `value` without the cast yields bytes — classic follow-up trap.
+- Pattern: Kafka → bronze Delta table; `availableNow` trigger for incremental loads, continuous
+  processing for lowest latency.
+
 ## 7. Lakeflow Connect — managed connectors recap
 
 | Source | Mode |
