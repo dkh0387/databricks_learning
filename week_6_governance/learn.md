@@ -73,10 +73,18 @@ ALTER TABLE dea_learning.silver.orders_archive_ext UNSET MANAGED;
 
 Why `SET MANAGED` beats DEEP CLONE for migrations
 ([official docs](https://docs.databricks.com/aws/en/tables/convert-external-managed)): it converts
-**in place** — readers on DBR 16.1+ see **no downtime**, **concurrent writes during the conversion are
-handled**, and name/settings/permissions/views/history are retained. A DEEP CLONE creates a *separate*
+**in place** with a two-phase process —
+
+1. **Copy phase, no downtime:** table data + Delta transaction log are copied to the managed location
+   while "active readers and writers to the external table run without interruption".
+2. **Switch phase, brief writer downtime:** commits that landed on the external location during the
+   copy are **caught up** and moved over, then the metadata switches to the managed location. Writes
+   are blocked only during this step (~1–5 min even for 10 TB tables). Readers on **DBR 16.4 LTS+**
+   experience no downtime at all.
+
+Name/settings/permissions/views/history are retained throughout. A DEEP CLONE creates a *separate*
 table: cutover needed (re-point consumers, re-grant, re-create views) and writes landing on the source
-during the copy require re-syncs — exactly the disruption the in-place command avoids.
+during the copy require manual re-syncs — exactly what the two-phase catch-up automates.
 
 Note: a dropped UC **managed** table is not immediately lost — `UNDROP TABLE` recovers it within 7 days (underlying files are cleaned up after ~30 days).
 
