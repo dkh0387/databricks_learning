@@ -21,11 +21,15 @@ Bronze = "what arrived". Silver = "what is true". Gold = "what's useful".
 ### Null handling
 
 ```python
-# Drop rows where any/key columns are null
+# Drop rows where any/key columns are null — full signature: dropna(how='any', thresh=None, subset=None)
 df.dropna()                                 # any null
 df.dropna(subset=["customer_id"])           # specific col(s)
+df.dropna(subset=["customer_id", "age"])    # OR logic! how='any' is the implicit default, applied
+                                            # WITHIN the subset: drops rows where customer_id OR age
+                                            # is null — not necessarily both
+df.dropna(how="all", subset=["customer_id", "age"])  # AND logic: only if BOTH are null
 df.dropna(how="all")                        # only if every col is null
-df.dropna(thresh=3)                         # keep rows with ≥3 non-nulls
+df.dropna(thresh=3)                         # keep rows with ≥3 non-nulls; thresh OVERRIDES how
 
 # Fill nulls
 df.fillna(0)                                # all numeric cols → 0
