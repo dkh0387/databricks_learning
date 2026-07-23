@@ -367,6 +367,7 @@ If a job was originally created in the UI and someone wants to bring it under bu
 ```bash
 # 1. Generate YAML from existing — the command writes the file itself
 #    (-d sets the resources dir, -s the src dir; no stdout redirect needed)
+#    Also downloads referenced artifacts (e.g. notebooks) into src/.
 databricks bundle generate job --existing-job-id 12345 -d resources
 
 # 2. Adopt it (bundle takes ownership without recreating)
@@ -374,6 +375,15 @@ databricks bundle deployment bind imported_job 12345 -t prod
 
 # 3. To release control later
 databricks bundle deployment unbind imported_job -t prod
+```
+
+One-step shortcut — `--bind` on generate combines steps 1+2
+(official flag description: "Automatically bind the generated resource with the existing one in the
+workspace"). Without binding, the next `bundle deploy` would create a **duplicate** job instead of
+updating the existing one — the exam angle of this feature.
+
+```bash
+databricks bundle generate job --existing-job-id 12345 --bind
 ```
 
 ## 7. Auth options — Databricks Unified Authentication
