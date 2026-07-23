@@ -10,7 +10,7 @@
 | **Securable** | Any UC object that can have grants: catalog, schema, table, view, volume, function, model, external location, storage credential, connection, share. |
 | **Managed table** | UC owns metadata AND files. `DROP TABLE` removes data. Stored in catalog/schema managed location. |
 | **External table** | UC owns metadata only; data at caller-given path. `DROP TABLE` leaves data. |
-| **`SET MANAGED`** | DBR 17.3 LTS+ command converting an external Delta table to managed without downtime. |
+| **`SET MANAGED`** | DBR 17.0+ (or serverless) command converting an external Delta table to managed without downtime. |
 | **`UNSET MANAGED`** | Rollback only — reverts a prior `SET MANAGED` (within 14 days) to the original external location; takes no location clause. |
 | **Volume** | UC securable for non-tabular files. Path `/Volumes/<catalog>/<schema>/<volume>/…`. |
 | **Storage credential** | UC-wrapped IAM role / managed identity used to access cloud storage. |

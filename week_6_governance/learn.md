@@ -60,16 +60,23 @@ USING DELTA
 LOCATION 's3://my-bucket/sales/orders/';
 ```
 
-### Convert between types (DBR 17.3 LTS+ or serverless, Delta only)
+### Convert between types (DBR 17.0+ or serverless, Delta only)
 
 ```sql
--- external -> managed (recommended over CTAS: no downtime, keeps history, perms, name)
+-- external -> managed (recommended over CTAS/DEEP CLONE: no downtime, keeps history, perms, name)
 ALTER TABLE dea_learning.silver.orders_archive_ext SET MANAGED;
 
 -- rollback: no location clause — only reverts a prior SET MANAGED (within 14 days)
 -- back to the original external location
 ALTER TABLE dea_learning.silver.orders_archive_ext UNSET MANAGED;
 ```
+
+Why `SET MANAGED` beats DEEP CLONE for migrations
+([official docs](https://docs.databricks.com/aws/en/tables/convert-external-managed)): it converts
+**in place** — readers on DBR 16.1+ see **no downtime**, **concurrent writes during the conversion are
+handled**, and name/settings/permissions/views/history are retained. A DEEP CLONE creates a *separate*
+table: cutover needed (re-point consumers, re-grant, re-create views) and writes landing on the source
+during the copy require re-syncs — exactly the disruption the in-place command avoids.
 
 Note: a dropped UC **managed** table is not immediately lost — `UNDROP TABLE` recovers it within 7 days (underlying files are cleaned up after ~30 days).
 
@@ -391,7 +398,7 @@ SELECT * FROM system.information_schema.table_privileges;
 - Traversal: need `USE CATALOG` + `USE SCHEMA` + leaf privilege (`SELECT`/`MODIFY`/…).
 - UC has **no `DENY`** — GRANT/REVOKE only. `DENY` exists only in legacy HMS table ACLs (exam trap).
 - Managed table dropped → data gone (but `UNDROP TABLE` recovers it within 7 days). External dropped → data stays.
-- `SET MANAGED` converts external → managed without downtime (DBR 17.3 LTS+). `UNSET MANAGED` (no location clause) rolls it back within 14 days.
+- `SET MANAGED` converts external → managed without downtime (DBR 17.0+). `UNSET MANAGED` (no location clause) rolls it back within 14 days.
 - Row filter = UDF returns `BOOLEAN`. Column mask = UDF returns same/castable type.
 - Manual filters/masks = per table. ABAC = tag once, applies everywhere.
 - `is_account_group_member('grp')` is the canonical check inside filter/mask UDFs.

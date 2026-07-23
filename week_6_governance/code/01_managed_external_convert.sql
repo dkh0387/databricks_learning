@@ -3,7 +3,7 @@
 -- MAGIC # Week 6 · Managed ↔ External — applied to an `orders_archive` table
 -- MAGIC Showcases the conversion on a realistic scenario: an archive table whose files we want to keep around
 -- MAGIC after the table itself is dropped (external), and later promote into managed status without downtime.
--- MAGIC Requires DBR 17.3 LTS+ or serverless; Delta format.
+-- MAGIC Requires DBR 17.0+ or serverless (per official docs); Delta format.
 
 -- COMMAND ----------
 

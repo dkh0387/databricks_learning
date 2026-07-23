@@ -439,7 +439,7 @@ Which Unity Catalog security pattern is this?
 
 **Q43.** An **external** Delta table must become a **managed** table — keeping its name, history,
 permissions, and dependent views, without copying data by hand. Which statement does this
-(DBR 17.3+ / serverless)?
+(DBR 17.0+ / serverless)?
 
 - A. `CREATE TABLE new_t AS SELECT * FROM old_t` then drop the old table
 - B. `ALTER TABLE silver.orders_archive SET MANAGED`
@@ -516,7 +516,7 @@ month. What is the recommended way to manage their access?
 | 40 | **B** | External-path access = storage credential (cloud identity) + external location (path ↔ credential binding), plus privileges on the external location. | `week_6_governance/learn.md` |
 | 41 | **C** | `ALTER TABLE ... OWNER TO <group>` transfers ownership — the management right over grants and lifecycle. Plain `SELECT`/`MODIFY` grants don't allow managing permissions. | `week_6_governance/learn.md` |
 | 42 | **A** | `is_member()` inside a view definition = dynamic view: per-caller column/row security, with grants given on the view instead of the base table. | `week_6_governance/learn.md` |
-| 43 | **B** | `ALTER TABLE ... SET MANAGED` (DBR 17.3+/serverless) promotes an external Delta table to managed in place — name, history, permissions, views preserved; `UNSET MANAGED` can revert within 14 days. | `week_6_governance/code/01_managed_external_convert.sql` |
+| 43 | **B** | `ALTER TABLE ... SET MANAGED` (DBR 17.0+/serverless) promotes an external Delta table to managed in place — name, history, permissions, views preserved; `UNSET MANAGED` can revert within 14 days. | `week_6_governance/code/01_managed_external_convert.sql` |
 | 44 | **C** | ABAC policies match on governed **tags** — tag the columns `pii`, and the policy applies wherever the tag appears, with no per-table configuration. | `week_6_governance/learn.md` |
 | 45 | **A** | Grant to a **group**; joiners/leavers are handled by group membership, not by new grants. Per-user grants don't scale and token sharing is an anti-pattern. | `week_6_governance/learn.md` |
 
