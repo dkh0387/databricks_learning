@@ -376,14 +376,28 @@ databricks bundle deployment bind imported_job 12345 -t prod
 databricks bundle deployment unbind imported_job -t prod
 ```
 
-## 7. Auth options
+## 7. Auth options — Databricks Unified Authentication
 
-| Method | Use when |
-| --- | --- |
-| OAuth user-to-machine (`databricks auth login`) | Local development |
-| OAuth machine-to-machine (Service Principal + secret) | CI/CD, recommended for prod |
-| PAT (`DATABRICKS_TOKEN`) | Quick start, lower security |
-| Azure CLI / AAD (`az login`) | Azure Databricks with AAD identity |
+**Unified authentication**
+([official page](https://docs.databricks.com/aws/en/dev-tools/auth/unified-auth)): one standardized
+credential configuration consumed identically by the whole tool ecosystem — Databricks CLI, Terraform
+provider, Databricks Connect, VS Code extension, and the Python/Java/Go SDKs. Define credentials once,
+every tool picks them up.
+
+Three configuration channels (highest precedence first): direct configuration in SDK code →
+**environment variables** → **profiles in `~/.databrickscfg`** (named `[DEFAULT]`, `[prod]`, …;
+select with `-p <profile>`, list with `databricks auth profiles`).
+
+| Method | Use when | Env-var set |
+| --- | --- | --- |
+| OAuth user-to-machine (`databricks auth login`) | Local development | — (browser flow, cached) |
+| OAuth machine-to-machine (Service Principal + secret) | CI/CD, recommended for prod | `DATABRICKS_HOST` + `DATABRICKS_CLIENT_ID` + `DATABRICKS_CLIENT_SECRET` (**3 vars**) |
+| PAT (legacy per Databricks) | Quick start, lower security | `DATABRICKS_HOST` + `DATABRICKS_TOKEN` (**2 vars**) |
+| Azure CLI / AAD (`az login`) | Azure Databricks with AAD identity | — |
+
+Default order in which tools try methods: **PAT → OAuth M2M → OAuth U2M**.
+Exam pattern: "which TWO env vars for unified auth?" → the PAT pair (`DATABRICKS_HOST`,
+`DATABRICKS_TOKEN`); "which THREE for an automated pipeline?" → the M2M trio.
 
 CI config minimum:
 
