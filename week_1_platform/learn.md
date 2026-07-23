@@ -152,6 +152,23 @@ cloud-provider VM provisioning step disappears.
   with serverless there is nothing to pre-warm.
 - Exam pattern: "classic job clusters start too slowly, serverless is not an option" → **instance pool**.
 
+### Spot instances
+
+Surplus cloud VM capacity at **60–90% discount** vs on-demand — but the cloud provider can **reclaim**
+the VMs anytime with short notice. The savings are paid for with interruptibility.
+
+- **Best suited for:** cost-sensitive, fault-tolerant, non-critical workloads that tolerate
+  interruptions — dev/test, ad-hoc analysis, retryable batch ETL. Spark recomputes lost worker tasks,
+  so a batch job survives a reclaim.
+- **Driver stays on-demand:** a reclaimed spot *worker* is recoverable (tasks re-run elsewhere); a
+  reclaimed spot *driver* kills the whole cluster and fails the job. Standard pattern: on-demand
+  driver + spot workers, with **fallback to on-demand** so scarce spot capacity doesn't shrink the cluster.
+- **Not for:** SLA-critical production jobs, strict-latency streaming, user-facing workloads.
+- Combines with instance pools (pools can hold spot instances) and is a classic-compute concept —
+  serverless has no instance-type choice at all.
+- Exam pattern: "which scenario suits spot instances?" → **fault-tolerant batch at lowest cost**,
+  never "all nodes incl. driver on spot".
+
 Decision shortcuts the exam likes:
 - "Need fast startup for an ad-hoc query by an analyst" → **Serverless SQL warehouse**.
 - "Scheduled nightly ETL job, cost-sensitive" → **Job cluster** (or serverless jobs if available).

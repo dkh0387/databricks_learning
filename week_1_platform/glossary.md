@@ -24,6 +24,7 @@
 | **Job cluster** | Ephemeral cluster created per job run; lower Jobs Compute DBU rate. Older exam term: "automated cluster". |
 | **Instance pool** | Pre-warmed idle cloud VMs that classic clusters draw from — cuts cluster startup time. Idle pool instances cost no DBUs, only cloud VM cost. |
 | **Access mode** | Cluster security mode deciding UC access: **Standard** (ex "Shared", multi-user, recommended) and **Dedicated** (ex "Single user") support UC; **No isolation shared** does not. |
+| **Spot instance** | Reclaimable surplus cloud VM at 60–90% discount — for fault-tolerant, non-critical workloads; keep the driver on-demand. |
 | **SQL warehouse** | Compute for SQL/BI workloads; serverless option available. |
 | **Serverless compute** | Fully managed compute — no cluster startup, infra cost bundled into DBU. |
 | **Photon** | Vectorized C++ engine; toggle at cluster level for SQL/DataFrame speedups. Free on serverless. |
