@@ -87,6 +87,12 @@ Databricks splits every deployment into two layers — the exam tests *where dat
 - Exam heuristic: "classic (non-serverless) compute — where does processing happen?" →
   **compute plane in the customer's cloud account**. The control plane never processes data; it
   orchestrates (UI, scheduler, metadata).
+- The control plane doesn't process data, but it **stores your platform assets**: notebook source
+  ("notebook commands"), workspace configuration, job definitions, secrets, SQL queries — encrypted
+  at rest ([official statement](https://docs.databricks.com/aws/en/security/keys/customer-managed-keys)).
+  That's why a notebook created in the workspace exists and is editable with **no cluster running** —
+  only hitting "Run" sends its code to a cluster in the compute plane. (Interactive notebook *results*
+  partially land in the control plane too; an admin setting can move them fully into the customer account.)
 
 ### Network consequence: reaching on-premises systems
 
