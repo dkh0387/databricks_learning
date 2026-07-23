@@ -82,6 +82,19 @@
     - drops row to remove the offending row
     - fails to stop the pipeline and notify the user about the violation
 
+### The complete decorator list ([official reference](https://docs.databricks.com/aws/en/dlt/expectations))
+
+| Action | Single constraint | Multiple constraints (dict) | SQL equivalent |
+| --- | --- | --- | --- |
+| **Warn** (default) | `expect` | `expect_all` | `EXPECT (...)` — no `ON VIOLATION` clause |
+| **Drop** | `expect_or_drop` | `expect_all_or_drop` | `ON VIOLATION DROP ROW` |
+| **Fail** | `expect_or_fail` | `expect_all_or_fail` | `ON VIOLATION FAIL UPDATE` |
+
+- **There is no `expect_or_warn` and no `ON VIOLATION WARN`** — warn is the default of the plain
+  `expect`, so it has no suffix/clause. Popular invented distractor.
+- Current docs write the decorators with the **`@dp.` prefix** (new declarative-pipelines module);
+  the classic `@dlt.` prefix used in this repo's examples still works — recognize both in questions.
+
 ## Streaming joins
 
 - **Stream-Snapshot Join:** join a streaming table with a static table (f.e. a lookup mapping table for country codes).
