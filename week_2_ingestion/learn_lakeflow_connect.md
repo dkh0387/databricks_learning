@@ -148,6 +148,24 @@ type (DBR 15.3+). Full coverage with examples in `learn_deep_dive.md` §5.
     - **Unity Catalog volume:** intermediate staging layer enabling pipelines to pick up and stream data
     - **Managed ingestion pipeline:** collects data and stores it in streaming Delta tables
 
+### One connector per source category — there is no "unified connector"
+
+Connectors are specialized by source type; each source gets its **own connection** (a UC securable
+holding the auth details) and its **own ingestion pipeline**
+([official overview](https://docs.databricks.com/aws/en/ingestion/lakeflow-connect/)). A scenario with
+Salesforce + SQL Server + Kafka + ADLS therefore means **separate connectors/pipelines per source**,
+not one generic connector — a popular invented distractor.
+
+Component difference inside the managed family (exam angle):
+
+| Connector | Components |
+| --- | --- |
+| **SaaS** (Salesforce, Workday, …) | connection + ingestion pipeline + destination tables |
+| **Database CDC** (SQL Server, MySQL, PostgreSQL, …) | the same **plus ingestion gateway + staging storage** (gateway pulls UC credentials, limits DB connections) |
+
+Standard connectors (cloud object storage via Auto Loader, event buses like Kafka) stay outside this
+architecture — they are configured directly on the stream/pipeline.
+
 ### Partner Connect (separate concept)
 
 A marketplace of **third-party connectors** for sources without a native Lakeflow Connect connector. Sits between
